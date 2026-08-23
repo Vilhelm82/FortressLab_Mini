@@ -1,0 +1,96 @@
+<!doctype html><meta charset="utf-8"><title>War Room</title>
+<style>
+ :root{--ink:#1c1a17;--stone:#8a8177;--paper:#e8e2d6;--blood:#8c2f22;--gold:#b8862f}
+ *{box-sizing:border-box}
+ body{margin:0;background:#141210;color:var(--paper);
+      font:14px/1.5 ui-monospace,"DejaVu Sans Mono",monospace;display:flex;height:100vh}
+ #left{padding:18px 20px;width:290px;border-right:1px solid #2e2a25;overflow:auto}
+ #right{flex:1;display:flex;flex-direction:column;padding:18px 20px;overflow:auto}
+ h1{font-size:15px;letter-spacing:.16em;text-transform:uppercase;margin:0 0 4px;color:var(--gold)}
+ .sub{color:var(--stone);font-size:11px;margin-bottom:18px}
+ .tool{display:block;width:100%;text-align:left;margin:3px 0;padding:7px 10px;
+       background:#1e1b18;border:1px solid #322d27;color:var(--paper);cursor:pointer;font:inherit}
+ .tool:hover{border-color:var(--gold)}
+ .tool.on{background:#2b241a;border-color:var(--gold);color:var(--gold)}
+ .k{color:var(--stone);font-size:11px;margin:16px 0 5px;letter-spacing:.1em;text-transform:uppercase}
+ #grid{display:grid;gap:1px;background:#2a2622;padding:1px;width:max-content;cursor:crosshair;user-select:none}
+ .c{width:21px;height:21px;background:#191715;display:flex;align-items:center;
+    justify-content:center;font-size:12px}
+ .c.wall{background:#4b463f}.c.gate{background:#6b4a24;color:#f0d9a8}
+ .c.pal{background:#4a3a22}.c.path{outline:1px solid var(--blood);outline-offset:-3px}
+ .c.exp{box-shadow:inset 0 0 0 21px rgba(140,47,34,.16)}
+ #out{margin-top:14px;white-space:pre-wrap;font-size:12.5px;border-top:1px solid #2e2a25;padding-top:12px}
+ .big{font-size:26px;color:var(--gold);letter-spacing:.04em}
+ button.go{width:100%;padding:10px;margin-top:16px;background:var(--blood);border:0;
+           color:#f4ece0;font:inherit;letter-spacing:.12em;cursor:pointer;text-transform:uppercase}
+ #credits{font-size:12px;color:var(--stone)}#credits b{color:var(--gold)}
+</style>
+<div id="left">
+  <h1>War Room</h1>
+  <div class="sub">Design. Seal. Learn what they saw.</div>
+  <div class="k">Structure</div>
+  <div id="tools1"></div>
+  <div class="k">Garrison &amp; posts</div>
+  <div id="tools2"></div>
+  <div class="k">Anchors</div>
+  <div id="tools3"></div>
+  <div class="k">Blood budget</div>
+  <div id="credits"></div>
+  <button class="go" onclick="seal()">Seal &amp; send them in</button>
+  <div id="out"></div>
+</div>
+<div id="right"><div id="grid"></div></div>
+<script>
+const W=27,H=19;
+const TOOLS=[
+ [["#","Stone wall","tools1"],["=","Palisade","tools1"],["G","Gate","tools1"],[".","Erase","tools1"]],
+ [["A","Archer  (1cr)","tools2"],["W","Archer on wall  (1cr)","tools2"],
+  ["m","Watchman  (1cr)","tools2"],["r","Messenger route  (1cr)","tools2"]],
+ [["T","War room","tools3"],["S","Their camp","tools3"]]].flat();
+let cur="#", g=[];
+for(let y=0;y<H;y++)g.push(Array(W).fill("."));
+TOOLS.forEach(([ch,label,box])=>{
+  const b=document.createElement("button");b.className="tool";b.textContent=label;
+  b.onclick=()=>{cur=ch;[...document.querySelectorAll(".tool")].forEach(x=>x.classList.remove("on"));
+                 b.classList.add("on");};
+  if(ch==="#")b.classList.add("on");
+  document.getElementById(box).appendChild(b);});
+const grid=document.getElementById("grid");
+grid.style.gridTemplateColumns=`repeat(${W},21px)`;
+let down=false;
+document.addEventListener("mouseup",()=>down=false);
+function paint(x,y){
+  if("TS".includes(cur))for(let j=0;j<H;j++)for(let i=0;i<W;i++)if(g[j][i]===cur)g[j][i]=".";
+  g[y][x]=cur;draw();}
+function draw(){
+  grid.innerHTML="";
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){
+    const ch=g[y][x],d=document.createElement("div");
+    d.className="c"+(ch==="#"||ch==="W"?" wall":ch==="G"?" gate":ch==="="?" pal":"");
+    d.textContent=".rm".includes(ch)&&ch!=="."?ch:(ch==="."?"":ch);
+    d.onmousedown=()=>{down=true;paint(x,y)};
+    d.onmouseenter=()=>{if(down)paint(x,y)};
+    grid.appendChild(d);}
+  credits();}
+function credits(){
+  let spent=0;for(const row of g)for(const ch of row)if("AWmr".includes(ch))spent++;
+  document.getElementById("credits").innerHTML=
+    `<b>${250-spent}</b> of 250 unspent &nbsp;·&nbsp; ${spent} committed`;}
+async function seal(){
+  const rows=g.map(r=>r.map(c=>"mr".includes(c)?".":c).join(""));
+  const out=document.getElementById("out");out.textContent="They are looking…";
+  const res=await (await fetch("/",{method:"POST",headers:{"Content-Type":"application/json"},
+                                   body:JSON.stringify({rows})})).json();
+  if(res.error){out.textContent="⚠ "+res.error;return;}
+  draw();
+  const cells=grid.children;
+  res.exposure.forEach((row,y)=>row.forEach((v,x)=>{if(v>0)cells[y*W+x].classList.add("exp")}));
+  res.path.forEach(([x,y])=>cells[y*W+x].classList.add("path"));
+  const r=res.report,e=r.entries.length?r.entries.map(p=>`(${p[0]},${p[1]})`).join(" "):"none — they walked in";
+  out.innerHTML=`<div class="big">${r.total}</div>`+
+    `<div style="color:var(--stone);font-size:11px;margin-bottom:10px">TOTAL COST TO REACH YOU</div>`+
+    `march ${r.travel}   ·   breaching ${r.breach}   ·   under fire ${r.exposure}\n`+
+    `they came in at: ${e}\n\nother ways in they weighed:\n`+
+    res.ranking.slice(1,4).map(([c,p])=>`  ${c}  at (${p[0]},${p[1]})`).join("\n");}
+draw();
+</script>
