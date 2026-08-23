@@ -30,7 +30,9 @@ COSTS = {"archer": 1, "watchman": 1, "messenger": 1,
 def flatten(cells, ents, w, h):
     """2.5D design -> the flat map the current planner reads.
 
-    INTERIM (heights ruled 2026-08-20): the planner is still 2D. A column
+    INTERIM (heights + subsurface ruled 2026-08-20): the planner is still 2D.
+    Excavated galleries are DESIGNED but not yet read -- mining, counter-mining
+    and collapse need the 2.5D planner. A column
     flattens to its BASE block type -- you breach a wall at its foot -- and
     an archer on a stack becomes 'W' (on a wall) or 'A' (on the ground).
     Height therefore does NOT yet affect breach cost, sightlines or vantage
@@ -54,7 +56,7 @@ def flatten(cells, ents, w, h):
     return rows
 
 
-def analyse(cells, ents, w, h):
+def analyse(cells, ents, w, h, subs=None):
     wm = WorldMap(flatten(cells, ents, w, h))
     if wm.start is None or wm.target is None:
         return {"error": "map needs both an attacker start (S) and a war-room (T)"}
@@ -86,7 +88,8 @@ class Handler(BaseHTTPRequestHandler):
         payload = json.loads(self.rfile.read(n) or b"{}")
         try:
             out = analyse(payload["cells"], payload.get("ents", {}),
-                          payload["w"], payload["h"])
+                          payload["w"], payload["h"],
+                          payload.get("subs"))
         except Exception as exc:                       # surface, never swallow
             out = {"error": f"{type(exc).__name__}: {exc}"}
         body = json.dumps(out).encode()
