@@ -27,8 +27,35 @@ COSTS = {"archer": 1, "watchman": 1, "messenger": 1,
          "sergeant": 10, "captain": 50}
 
 
-def analyse(rows):
-    wm = WorldMap(rows)
+def flatten(cells, ents, w, h):
+    """2.5D design -> the flat map the current planner reads.
+
+    INTERIM (heights ruled 2026-08-20): the planner is still 2D. A column
+    flattens to its BASE block type -- you breach a wall at its foot -- and
+    an archer on a stack becomes 'W' (on a wall) or 'A' (on the ground).
+    Height therefore does NOT yet affect breach cost, sightlines or vantage
+    range. That is the next planner upgrade, not a silent approximation.
+    """
+    rows = []
+    for y in range(h):
+        line = []
+        for x in range(w):
+            stack = cells[y][x]
+            ent = ents.get(f"{x},{y}")
+            if ent in ("T", "S"):
+                line.append(ent)
+            elif ent == "A":
+                line.append("W" if stack else "A")
+            elif stack:
+                line.append(stack[0])
+            else:
+                line.append(".")
+        rows.append("".join(line))
+    return rows
+
+
+def analyse(cells, ents, w, h):
+    wm = WorldMap(flatten(cells, ents, w, h))
     if wm.start is None or wm.target is None:
         return {"error": "map needs both an attacker start (S) and a war-room (T)"}
     r = plan(wm)
@@ -58,7 +85,8 @@ class Handler(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", 0))
         payload = json.loads(self.rfile.read(n) or b"{}")
         try:
-            out = analyse(payload.get("rows", []))
+            out = analyse(payload["cells"], payload.get("ents", {}),
+                          payload["w"], payload["h"])
         except Exception as exc:                       # surface, never swallow
             out = {"error": f"{type(exc).__name__}: {exc}"}
         body = json.dumps(out).encode()
