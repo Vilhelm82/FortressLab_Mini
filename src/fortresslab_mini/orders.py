@@ -1,83 +1,104 @@
 """
-Orders rung — grammar, validator, executor.
+Orders rung — generalised doctrine.
 
     order := (scope, release conditions)
 
-An order is a guarded decision tree over a CLOSED predicate vocabulary.
-Granularity grows the order, not the engine: the executor is the same
-guard-evaluate-transition loop whether the tree has one clause or nine.
+RULED 2026-08-20: the language must cover anything that could happen without
+listing possibilities. No named situations, no lookup table of patterns.
+Conditions are composed from a small closed set of TERMS and COMPARATORS, so
+any situation a commander could care about is a composition, never a new rule.
 
-Rulings implemented here (2026-08-20):
-  * bare Hold is malformed — an order must carry release conditions
-  * release validity: releases must be definite outcomes, success and failure
-    both covered; at least one exit the unit can trigger from its own local
-    observation ("until recalled" alone soft-locks a company)
-  * scope lattice: a detached sub-order's scope must sit inside the parent's
-  * instruction capacity: tree size is bounded by the rank that carries it
-  * order-lock: no re-tasking until a release fires
-  * ferality: officer dead AND order complete/unfollowable -> feral
-  * auto-join: a feral friendly within detection of an under-capacity company
-    fills the open slot
+    guard := (cmp, term, term) | ("ratio_ge", term, term, num, den)
+           | ("and"|"or"|"not", guard...)
+    term  := ("count", class, region) | ("self", attr)
+           | ("clock",) | ("elapsed",) | ("hazard", kind, region) | int
 
-Malformed orders are UNISSUABLE — excluded at legality, never punished.
-Integer arithmetic only (attrition thresholds are integer fractions).
+"Enemy contact" is not a predicate; it is count(enemy, here) >= 1.
+"Position lost" is count(enemy, assigned) >= 1. "Out of ammo" is
+self(ammo) <= 0. When fire, water, tunnels or engines land they register
+CLASSES and HAZARD kinds -- the grammar does not change, and doctrine drafted
+today keeps working.
+
+Bounded on purpose: total operators, no loops, no recursion outside scope
+nesting. General over the game's observables, not general computation --
+which is what keeps validation decidable and compile-time refusal possible.
 """
 
 from fortresslab_mini.kernel import cheb
 
+CLASSES = {"enemy", "friend", "messenger", "officer", "civilian"}
+HAZARDS = {"fire", "water", "smoke"}
+SELF_ATTRS = {"strength", "initial", "losses", "ammo"}
+LOCAL_REGIONS = {"here", "assigned", "visible"}
 
-# --- The closed predicate vocabulary ------------------------------------------
-# local: verifiable by the unit from its own observation, no messenger needed.
-# failure_exit: an outcome the unit itself can reach -- the guaranteed branch
-# of the x-or-y release rule. "Arrival" predicates are local but NOT guaranteed
-# (the messenger may never come), so they cannot be an order's only exit.
+CMP = {"ge": lambda a, b: a >= b,
+       "le": lambda a, b: a <= b,
+       "eq": lambda a, b: a == b}
 
-PREDICATES = {
-    "always":             dict(local=True,  failure_exit=False),
-    "time_at_or_after":   dict(local=True,  failure_exit=False),  # diegetic clock
-    "messenger_contact":  dict(local=True,  failure_exit=False),
-    "enemy_contact":      dict(local=True,  failure_exit=False),
-    "no_enemy_contact":   dict(local=True,  failure_exit=False),
-    "attrition_at_least": dict(local=True,  failure_exit=True),   # (num, den)
-    "position_lost":      dict(local=True,  failure_exit=True),
-    "remote_fact":        dict(local=False, failure_exit=False),  # far-side facts
-}
+
+def region_is_local(r):
+    return r in LOCAL_REGIONS
+
+
+def eval_term(t, world):
+    if isinstance(t, int):
+        return t
+    op = t[0]
+    if op == "clock":
+        return world["clock"]
+    if op == "elapsed":
+        return world["elapsed"]
+    if op == "self":
+        return world["self"][t[1]]
+    if op == "count":
+        return world["count"].get((t[1], t[2]), 0)
+    if op == "hazard":
+        return world["hazard"].get((t[1], t[2]), 0)
+    raise ValueError(f"unknown term {t!r}")
 
 
 def eval_guard(g, world):
-    """Guards are tuples: (name, *args) or ('and', g1, g2, ...)."""
     op = g[0]
     if op == "and":
         return all(eval_guard(x, world) for x in g[1:])
-    if op == "always":
-        return True
-    if op == "time_at_or_after":
-        return world["hour"] >= g[1]
-    if op == "messenger_contact":
-        return bool(world.get("messenger_contact"))
-    if op == "enemy_contact":
-        return bool(world.get("enemy_contact"))
-    if op == "no_enemy_contact":
-        return not world.get("enemy_contact")
-    if op == "attrition_at_least":
-        lost, total = world["losses"]
-        num, den = g[1], g[2]
-        return lost * den >= num * total          # integers only
-    if op == "position_lost":
-        return bool(world.get("position_lost"))
-    if op == "remote_fact":
-        return bool(world.get("remote", {}).get(g[1]))
-    raise ValueError(f"unknown predicate {op!r}")
+    if op == "or":
+        return any(eval_guard(x, world) for x in g[1:])
+    if op == "not":
+        return not eval_guard(g[1], world)
+    if op == "ratio_ge":
+        a, b, num, den = eval_term(g[1], world), eval_term(g[2], world), g[3], g[4]
+        return a * den >= num * b
+    if op in CMP:
+        return CMP[op](eval_term(g[1], world), eval_term(g[2], world))
+    raise ValueError(f"unknown guard {op!r}")
 
 
-def leaf_predicates(g):
-    if g[0] == "and":
-        return [n for x in g[1:] for n in leaf_predicates(x)]
-    return [g[0]]
+def terms_of(g):
+    op = g[0]
+    if op in ("and", "or", "not"):
+        return [t for x in g[1:] for t in terms_of(x)]
+    return [t for t in g[1:] if isinstance(t, tuple)]
 
 
-# --- Scope: the attenuating grant ---------------------------------------------
-# scope := {"kinds": set of activity kinds, "area": (x0, y0, x1, y1)}
+def guard_is_local(g):
+    """Observable by the unit unaided: every region referenced is local."""
+    for t in terms_of(g):
+        if t[0] in ("count", "hazard") and not region_is_local(t[2]):
+            return False
+    return True
+
+
+def guard_is_self_triggerable(g):
+    """Depends only on the unit's own state or the passage of time.
+
+    The general form of the x-or-y release rule. An arrival -- anything
+    counting another party -- may never happen, so it can never be an
+    order's only exit. Own attrition, own ammo, and elapsed time resolve.
+    Nothing here names a situation; it reads the term types.
+    """
+    ts = terms_of(g)
+    return bool(ts) and all(t[0] in ("self", "clock", "elapsed") for t in ts)
+
 
 def area_within(inner, outer):
     ix0, iy0, ix1, iy1 = inner
@@ -86,14 +107,10 @@ def area_within(inner, outer):
 
 
 def scope_within(sub, parent):
-    """Attenuation, never amplification: kinds subset, area contained."""
+    """Attenuation, never amplification."""
     return set(sub["kinds"]) <= set(parent["kinds"]) \
         and area_within(sub["area"], parent["area"])
 
-
-# --- Instruction capacity: tree size bounded by the head that carries it ------
-# Measured in guards (edges), the branch points of the drafted tree,
-# including any embedded sub-orders.
 
 RANK_CAPACITY = {"sergeant": 8, "knight": 8, "captain": 24}
 
@@ -108,18 +125,14 @@ def order_size(order):
     return n
 
 
-# --- Validator: the compile-time check ----------------------------------------
-
 def _release_edges(order):
-    out = list(e for e in order.get("global_edges", []) if "release" in e)
+    out = [e for e in order.get("global_edges", []) if "release" in e]
     for node in order["nodes"].values():
         out += [e for e in node["edges"] if "release" in e]
     return out
 
 
 def _release_reachable(order):
-    """Every node must be able to reach a release. Global release edges apply
-    everywhere, so their presence satisfies all nodes at once."""
     if any("release" in e for e in order.get("global_edges", [])):
         return True
     reaches = {nid: any("release" in e for e in n["edges"])
@@ -130,10 +143,8 @@ def _release_reachable(order):
         for nid, n in order["nodes"].items():
             if not reaches[nid]:
                 for e in n["edges"]:
-                    if "goto" in e and reaches.get(e["goto"]):
-                        reaches[nid] = True
-                        changed = True
-                    if "detach" in e and reaches.get(e["detach"]["goto"]):
+                    tgt = e.get("goto") or (e.get("detach") or {}).get("goto")
+                    if tgt and reaches.get(tgt):
                         reaches[nid] = True
                         changed = True
     return all(reaches.values())
@@ -142,24 +153,19 @@ def _release_reachable(order):
 def validate_order(order, rank="sergeant"):
     """Returns (ok, problems). Malformed orders are unissuable."""
     problems = []
-
     releases = _release_edges(order)
+
     if not releases:
         problems.append("bare order: no release conditions at all")
     else:
-        # Every release must be verifiable by the unit itself.
         for e in releases:
-            names = leaf_predicates(e["when"])
-            if not all(PREDICATES[n]["local"] for n in names):
-                problems.append(f"release on non-local predicate(s) {names}")
-        # The x-or-y rule: at least one release the unit can reach on its own
-        # -- a guaranteed outcome of failure, not an arrival that may never come.
-        if not any(all(PREDICATES[n]["local"] for n in leaf_predicates(e["when"]))
-                   and any(PREDICATES[n]["failure_exit"]
-                           for n in leaf_predicates(e["when"]))
-                   for e in releases):
+            if not guard_is_local(e["when"]):
+                problems.append("release depends on a region the unit "
+                                "cannot observe")
+        if not any(guard_is_self_triggerable(e["when"]) for e in releases):
             problems.append("no guaranteed self-triggerable exit "
-                            "(release could depend on an arrival that never comes)")
+                            "(every release could depend on something "
+                            "that never arrives)")
 
     if not _release_reachable(order):
         problems.append("a node cannot reach any release")
@@ -172,18 +178,15 @@ def validate_order(order, rank="sergeant"):
                 sub = e["detach"]["order"]
                 if not scope_within(sub["scope"], order["scope"]):
                     problems.append("detached sub-order exceeds parent scope")
-                ok, why = validate_order(sub, rank)
+                _, why = validate_order(sub, rank)
                 problems += [f"sub-order: {p}" for p in why]
 
-    size = order_size(order)
-    cap = RANK_CAPACITY[rank]
+    size, cap = order_size(order), RANK_CAPACITY[rank]
     if size > cap:
         problems.append(f"order has {size} guards; {rank} capacity is {cap}")
 
     return (not problems), problems
 
-
-# --- Executor: guard-evaluate-transition, one edge per tick -------------------
 
 class MalformedOrder(Exception):
     pass
@@ -201,12 +204,11 @@ class OrderExec:
                 raise MalformedOrder("; ".join(why))
         self.order = order
         self.node = order["start"]
-        self.released = None            # release reason once fired
-        self.stale = False              # officer dead, order still live
-        self.detachments = []           # (n_units, OrderExec)
+        self.released = None
+        self.detachments = []
 
     def can_retask(self):
-        """The order-lock: no new orders until the release fires."""
+        """The order-lock: no new orders until a release fires."""
         return self.released is not None
 
     def current_scope(self):
@@ -230,25 +232,16 @@ class OrderExec:
             self.node = e["goto"]
             return ("goto", e["goto"])
         d = e["detach"]
-        sub = OrderExec(d["order"], _validated=True)   # validated at parent issue
+        sub = OrderExec(d["order"], _validated=True)
         self.detachments.append((d["n"], sub))
         self.node = d["goto"]
         return ("detach", d["n"], sub)
 
 
-# --- Unit lifecycle: obedient -> stale -> feral -> rallied --------------------
-
 ORDERED, STALE, FERAL, AWAITING = "ordered", "stale", "feral", "awaiting"
 
 
 def company_status(officer_alive, exec_):
-    """The leash, the wind-up toy, and the slipped leash.
-
-    * order live + officer alive        -> ORDERED
-    * order live + officer dead         -> STALE  (executes unchanged)
-    * order done/absent + officer alive -> AWAITING new orders
-    * order done/absent + officer dead  -> FERAL  (raw bloodlust)
-    """
     order_live = exec_ is not None and exec_.released is None
     if order_live:
         return ORDERED if officer_alive else STALE
@@ -256,11 +249,35 @@ def company_status(officer_alive, exec_):
 
 
 def try_rally(feral_pos, companies, detection_radius):
-    """Auto-join: a feral friendly within detection of an under-capacity
-    company fills the open slot. First eligible company in listed order."""
     for c in companies:
         if c["members"] < c["capacity"] \
                 and cheb(feral_pos, c["pos"]) <= detection_radius:
             c["members"] += 1
             return c
     return None
+
+
+# --- Doctrine helpers: the repeatable language, composed not enumerated -------
+
+def contact(cls="enemy", region="here", n=1):
+    return ("ge", ("count", cls, region), n)
+
+
+def absent(cls="enemy", region="here"):
+    return ("eq", ("count", cls, region), 0)
+
+
+def losses_at_least(num, den):
+    return ("ratio_ge", ("self", "losses"), ("self", "initial"), num, den)
+
+
+def clock_at_or_after(hour):
+    return ("ge", ("clock",), hour)
+
+
+def spent(attr="ammo"):
+    return ("le", ("self", attr), 0)
+
+
+def hazard_in(kind, region="here"):
+    return ("ge", ("hazard", kind, region), 1)
