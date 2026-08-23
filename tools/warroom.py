@@ -12,6 +12,7 @@ duplicated logic.
 
 import json
 import sys
+import traceback
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
@@ -38,8 +39,9 @@ def flatten(cells, ents, w, h):
     Height therefore does NOT yet affect breach cost, sightlines or vantage
     range. That is the next planner upgrade, not a silent approximation.
     """
-    rows = []
+    rows, heights = [], []
     for y in range(h):
+        hrow = []
         line = []
         for x in range(w):
             stack = cells[y][x]
@@ -52,12 +54,15 @@ def flatten(cells, ents, w, h):
                 line.append(stack[0])
             else:
                 line.append(".")
+            hrow.append(len(stack))
         rows.append("".join(line))
-    return rows
+        heights.append(hrow)
+    return rows, heights
 
 
 def analyse(cells, ents, w, h, subs=None):
-    wm = WorldMap(flatten(cells, ents, w, h))
+    rows, heights = flatten(cells, ents, w, h)
+    wm = WorldMap(rows, heights)
     if wm.start is None or wm.target is None:
         return {"error": "map needs both an attacker start (S) and a war-room (T)"}
     r = plan(wm)
@@ -91,7 +96,10 @@ class Handler(BaseHTTPRequestHandler):
                           payload["w"], payload["h"],
                           payload.get("subs"))
         except Exception as exc:                       # surface, never swallow
-            out = {"error": f"{type(exc).__name__}: {exc}"}
+            tb = traceback.format_exc()
+            print(tb, file=sys.stderr)
+            last = tb.strip().splitlines()[-3:]
+            out = {"error": f"{type(exc).__name__}: {exc}\n" + "\n".join(last)}
         body = json.dumps(out).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")

@@ -80,19 +80,31 @@ M2D = [
 ]
 
 M3 = [
-    "...................",
-    "...#############...",
-    "...#.....T.....#...",
-    "...#...........#...",
-    "...#...........#...",
-    "...#...........#...",
-    "...#...........#...",
-    "...#...........#...",
-    "...####W#G#W####...",
-    "...................",
-    "...................",
-    ".........S.........",
+    "......................",
+    "...################...",
+    "...#..............#...",
+    "...#.......T......#...",
+    "...#..............#...",
+    "...#..............#...",
+    "...#..............#...",
+    "...#..............#...",
+    "...#..............#...",
+    "...#..............#...",
+    "...######W#G#W#####...",
+    "......................",
+    "......................",
+    "..........S...........",
 ]
+
+# M4 — does HEIGHT cast shadow? Archer on a wall (eye 2) against a screen.
+M4_BASE = ["..............", "..............", "......X.......",
+           "......X.......", "..S...X...T...", "......X.......",
+           "......X.......", "..............", ".....W........",
+           ".............."]
+
+
+def m4(height_digit):
+    return [r.replace("X", height_digit) for r in M4_BASE]
 
 
 def test_M0_cost_is_pure_travel():
@@ -140,11 +152,18 @@ def test_M3_breaches_somewhere():
     assert len(r["report"]["entries"]) >= 1
 
 
-def test_M3_circles_to_the_dark_north_face():
+def test_M3_circles_to_the_dark_face():
     """The whole thesis in one assertion: it walks the long way round because
-    the short way is covered. Nobody wrote 'avoid archers'."""
+    the short way is covered. Nobody wrote 'avoid archers'.
+
+    Recalibrated 2026-08-20 when archers gained eye height: a man on a wall
+    sees OVER walls of the same height, so occlusion no longer creates the
+    dark face -- range does. The courtyard is now deep enough that the far
+    face lies beyond the gate archers' reach.
+    """
     _, r = solve_map(M3)
-    assert all(y <= 2 for _, y in r["report"]["entries"])
+    assert r["report"]["entries"], "expected a breach"
+    assert all(x <= 3 or y <= 2 for x, y in r["report"]["entries"])
 
 
 def test_M3_ignores_the_covered_gate():
@@ -155,4 +174,19 @@ def test_M3_ignores_the_covered_gate():
 def test_M3_conductance_ranking_agrees():
     """The independent breach ranking picks the same face as the path."""
     _, r = solve_map(M3)
-    assert r["breach_ranking"][0][1][1] <= 2
+    top = r["breach_ranking"][0][1]
+    assert top in r["report"]["entries"] or top[0] <= 3
+
+
+def test_M4_low_screen_casts_no_shadow():
+    """A one-high wall does not hide you from a man standing on a one-high
+    wall. He is above it. This is why a flat castle has no dead ground."""
+    _, r = solve_map(m4("1"))
+    assert r["exp"][4][7] > 0
+
+
+def test_M4_tall_screen_casts_shadow():
+    """Raise the same screen to four and the ground behind it goes dark --
+    with no change to anything but height."""
+    _, r = solve_map(m4("4"))
+    assert r["exp"][4][7] == 0
