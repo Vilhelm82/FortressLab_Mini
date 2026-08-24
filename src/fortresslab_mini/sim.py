@@ -20,6 +20,8 @@ from fortresslab_mini.kernel import cheb
 from fortresslab_mini.worldmap import DIRS8, BREACH
 from fortresslab_mini.enemy_brain import cost_field
 from fortresslab_mini.orders import OrderExec, company_status, FERAL, STALE
+from fortresslab_mini.perception import (Perception, facing_from_delta, RING,
+                                         IDENTIFIED, PRESENCE, NOTHING)
 
 DETECTION = 6            # stand-in for perception until the capacitor lands
 TICKS_PER_HOUR = 30      # diegetic clock; orders read time_at_or_after
@@ -42,6 +44,7 @@ class Unit:
     y: int
     company: int = -1
     alive: bool = True
+    facing: int = 0           # index into perception.RING; set by movement
 
 
 @dataclass
@@ -56,8 +59,13 @@ class Company:
 
 
 class Sim:
-    def __init__(self, wm, exposure=None):
+    def __init__(self, wm, exposure=None, fog=False, perception_cfg=None):
+        """fog defaults OFF: that is the v0 baseline (universal awareness),
+        the known-clear control every fogged run is compared against. Turn it
+        on per-run; it is a rung, not a global switch."""
         self.wm = wm
+        self.fog = fog
+        self.percept = Perception(wm, perception_cfg)
         self.exp = exposure if exposure is not None else wm.exposure_field()
         self.units = {}
         self.companies = {}
@@ -137,7 +145,11 @@ class Sim:
         return self._fields[goal]
 
     def _nearest_enemy(self, unit):
-        foes = [u for u in self.living() if u.side != unit.side]
+        """Under fog a unit may only act deliberately on what it has
+        IDENTIFIED. Presence alone is a reason to investigate, not to charge."""
+        foes = [u for u in self.living()
+                if u.side != unit.side
+                and (not self.fog or self.percept.knows(unit.uid, u.uid))]
         if not foes:
             return None
         best = min(foes, key=lambda f: (cheb((f.x, f.y), (unit.x, unit.y)),
@@ -169,8 +181,19 @@ class Sim:
         # fog, so awareness is universal by construction (spec U4). When the
         # perception capacitor lands, this reads the belief state instead.
         foes = [u for u in self.living()
-                if u.side != unit.side and u.kind == "C"]
-        return (foes[0].x, foes[0].y) if foes else None
+                if u.side != unit.side and u.kind == "C"
+                and (not self.fog or self.percept.knows(unit.uid, u.uid))]
+        if foes:
+            return (foes[0].x, foes[0].y)
+        # Nothing identified: investigate the strongest mere PRESENCE.
+        if self.fog:
+            hits = [(self.percept.charge.get((unit.uid, u.uid), 0), u.uid, u)
+                    for u in self.living() if u.side != unit.side]
+            hits = [h for h in hits if h[0] > 0]
+            if hits:
+                _, _, u = max(hits)
+                return (u.x, u.y)
+        return None
 
     def _step_toward(self, unit, goal):
         dist = self._field(goal)
@@ -190,6 +213,11 @@ class Sim:
     def step(self):
         events = []
         self._fields = {}
+
+        # 0. Perception. Charge the accumulators before anyone decides anything.
+        if self.fog:
+            for e in self.percept.step(self.living(), self.tick):
+                events.append(dict(e, kind="sighting"))
 
         # 1. Orders. Guards read the real world now.
         for c in self.companies.values():
@@ -218,7 +246,11 @@ class Sim:
                 claimed.add(dest)
                 intents[u.uid] = dest
         for uid, (x, y) in intents.items():
-            self.units[uid].x, self.units[uid].y = x, y
+            u = self.units[uid]
+            dx, dy = x - u.x, y - u.y
+            if (dx, dy) in RING:
+                u.facing = facing_from_delta(dx, dy)  # you face where you walk
+            u.x, u.y = x, y
 
         # 3. Contact. Every hostile pair at Chebyshev <= 1 dies, simultaneously.
         doomed = set()
@@ -242,7 +274,11 @@ class Sim:
             "tick": self.tick,
             "clock": CLOCK_START + self.tick // TICKS_PER_HOUR,
             "units": [{"uid": u.uid, "side": u.side, "kind": u.kind,
-                       "x": u.x, "y": u.y} for u in self.living()],
+                       "x": u.x, "y": u.y, "facing": u.facing,
+                       "sees": {t.uid: self.percept.state(u.uid, t.uid)
+                                for t in self.living() if t.side != u.side
+                                if self.percept.state(u.uid, t.uid) != NOTHING}}
+                      for u in self.living()],
             "companies": [
                 {"cid": c.cid,
                  "status": company_status(

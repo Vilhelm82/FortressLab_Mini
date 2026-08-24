@@ -73,13 +73,22 @@ class WorldMap:
 
     def eye(self, x, y):
         """A unit stands on top of whatever it occupies (ruled 2026-08-20):
-        placing an archer on a block puts him on it, one level of advantage."""
+        placing an archer on a block puts him on it, one level of advantage.
+
+        Bounds-safe: off-map reads as ground rather than raising. Grid
+        accessors degrade, they do not crash -- an unguarded index here is
+        how a whole analysis dies on one stray coordinate.
+        """
+        if not self.inside(x, y):
+            return 1
         return self.height[y][x] + 1
 
     def blocks_sight(self, x, y, eye=1):
         """Stone blocks a line only if it stands at or above the eye looking
         through it. A man on a one-high wall sees over one-high walls; the
         same wall blinds a man standing beside it. Timber gates never block."""
+        if not self.inside(x, y):
+            return True                 # there is nothing to see off the map
         return self.cell[y][x] == WALL and self.height[y][x] >= eye
 
     # --- line of sight: integer walk, endpoints excluded ---------------------
