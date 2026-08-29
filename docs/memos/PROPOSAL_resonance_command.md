@@ -8,10 +8,18 @@ AI-logic backend with human orders translated into it; Will confirmed on
 26 Aug that resonance is the default system. Tests VALIDATE that decision —
 they are not a gate on it.)*
 
-**Fallback retained.** The discrete order grammar in `orders.py`, its
-validator, lifecycle and 147 green tests remain in the repo and untouched, so
-the original design is recoverable if resonance fails in practice. It is no
-longer the primary.
+**No fallback remains.** The discrete order grammar (`orders.py`), the
+resonance-native order representation that replaced it (`score.py`), the
+bridge compiler, the old commander, sim, enemy brain, perception capacitor
+and belief field were all **deleted on 26 Aug** at Will's direction — legacy
+material was costing more in confusion than it was worth. They are in git
+history and nowhere else.
+
+**What stands (29 Aug):** the field itself, ported to Rust and to three
+dimensions. `rust/` is a plain library crate — std only, no engine — that
+Godot will wrap through GDExtension for the iOS and Android build. The
+command layer comes back only once the map and resonance mechanics are
+settled.
 
 Will's framing: *"I'm working out the details as I go, so we will have to see
 how this system works in practice and adjust or amend if required."*
@@ -186,8 +194,9 @@ materially beat the existing method):
    tree with nested detachments. Whether harmony can carry that without
    degenerating into a frequency→predicate lookup table — the exact thing the
    generalised grammar was written to abolish — is unproven.
-2. **Cost of replacement.** `orders.py` plus validator, lifecycle and 147
-   green tests would be rewritten.
+2. ~~**Cost of replacement.**~~ **MOOT (26 Aug).** The grammar was deleted
+   rather than kept alongside. There is nothing left to weigh resonance
+   against.
 3. **Unproven in practice.** Will's own position: work out the details as we
    go, see how it behaves, adjust or amend.
 
@@ -973,13 +982,15 @@ with **not a single music-theory detail ever surfacing**.
 
 | layer | what it is | status |
 |---|---|---|
-| **interface** | the order grammar / the human UI — how orders are authored | LIVE, unchanged |
-| **compiler** | grammar order → chord, tuning, sheet music | TO BUILD |
-| **runtime** | the resonance field — units execute by listening | TO BUILD |
+| **interface** | the human UI — how orders are authored | NOT YET DESIGNED |
+| **compiler** | authored order → chord, tuning, sheet music | DELETED; rebuild when the interface exists |
+| **runtime** | the resonance field — units execute by listening | **BUILT, in Rust** |
 
-The ruled grammar **does not die**; it becomes the authoring surface and the
-compilation source. `orders.py`, its validator and its 147 tests keep testing
-the front end. What changes is what happens *after* an order is issued.
+*(Written when `orders.py` was to be the authoring surface. It was deleted on
+26 Aug: it predated the resonance ruling and carried clock terms the runtime
+refuses. What authors orders is now an open design question — see the gaps at
+the end of this document. The architecture stands; only its front end is
+vacant.)*
 
 ### Consequences
 
@@ -1006,8 +1017,10 @@ It is no longer *"can a human express this in chords"*. It is:
 > compile to a performance, and does executing that performance produce the
 > behaviour the order specifies?
 
-The 10 am order remains the canonical fixture, now testing the compiler rather
-than the human.
+**The 10 am order is dead as a fixture** — §14 scrapped the clock, so its
+timed branches are not expressible by design. A new canonical order is needed,
+authored by Will, exercising location, sub-location, parts, and all three
+release mechanisms.
 
 **And compilation failures may be a feature.** Will has ruled the finite
 vocabulary *desirable*. An order that cannot be sung is arguably an order the
@@ -1323,3 +1336,103 @@ composition. Claude's reading, flagged as a reading: a part is addressed by
 **(unit type, count)** — *"the three archers"*, *"two men-at-arms"* — which is
 exactly how the 10 am order phrases it, and never by identity. Confirm or
 correct.
+
+---
+
+## 32. Propagation: the loudest path, not the shortest (28 Aug)
+
+**Found while building, and it changes what "bounces" means.**
+
+The first implementation had sound take the route with the fewest steps,
+preferring fewer walls only among ties. So a listener behind a wall was
+reached by the five-step line *through* the stone rather than the twenty-step
+route round through the door — and since the specifier crosses no stone, it
+read zero.
+
+**Sound takes the path that delivers the most energy.** Twenty steps of open
+air at 0.88 decay is 0.078 of the original; two cells of stone is nothing. The
+way round wins outright. Implemented as Dijkstra in −log(amplitude) space,
+**per band**, because the bass will pay to cross a wall and the specifier will
+not.
+
+This is what makes Will's *"the dyad bounces around the whole map"* true with
+**no reflection anywhere** — §17's total absorption stands. The specifier
+simply travels every open route it can: out of the door, along the corridor,
+over the parapet. Its gradient at any cell points back along the way it
+actually arrived, which is the way in.
+
+### Consequences
+
+**The blind spot inverts.** Directly opposite a wall the specifier is
+*quieter* than the cells either side, because the way round is longer from
+there. What was a local maximum trapping a unit against the stone is now a
+local minimum pushing him sideways toward the opening.
+
+**Navigation needs no map.** With the two bands — specifier as the primary
+vector, root breaking ties — **every one of the 291 open cells inside the
+development castle reaches the war room by pure local sampling.** No
+pathfinding, no knowledge of the layout. Cells outside fail correctly: the
+castle is sealed, and neither sound nor men get in through a shut gate.
+
+## 33. The third dimension (29 Aug)
+
+**RULED: the map is 3D.** Not a heightmap — voxel columns of typed blocks, so
+a tunnel is expressible. Ground is earth at z=0; a wall two high fills z=1 and
+z=2; a man stands in the lowest air cell above something solid, and his eye is
+at his own z.
+
+**RULED: the stair block.** Solid like anything else — it stops sight and
+sound identically — but a man may change one level onto or off it. **One stair
+lifts one level**; to rise two you need a second, and that one needs something
+solid beneath it. Nothing else changes level: men do not scramble up walls.
+
+*Consequence, not designed for:* a wall-walk reached by a single stair is a
+trap — from the walk, the only step available is back down. Stair placement
+becomes a defensive decision.
+
+### What the third dimension gives the field
+
+- **Sight is genuinely blocked and genuinely granted.** Ground-to-ground
+  across a wall is blind; from the wall-walk it is clear. A man one cell back
+  from the outer edge is blinded by his own parapet.
+- **The specifier climbs.** Unable to cross stone, it goes over the top — so
+  it is loudest on the wall-walk and weaker at the foot beyond, because that
+  is where the way over is shortest.
+- **The beam has a cone.** Perception is directional at last: facing away
+  means seeing nothing, which is what makes the ruled stealth kill possible.
+  (It was omnidirectional in the flat build — a real defect, now fixed.)
+
+## 34. Where the build stands (29 Aug)
+
+**Python is retired.** The first product is mobile — iOS and Android, PC
+later — so the sim is being written in **Rust** as a plain library crate
+(`rust/`, std only, no engine), which **Godot 4** will wrap through
+GDExtension. Godot for the MIT licence, small mobile binaries, and 3D that is
+far beyond what low-poly voxel needs. The engine stays a thin viewer: the sim
+emits the sparse deviation log of §24 and the renderer plays it back, so the
+engine choice stays reversible.
+
+**Proven in Rust:** the voxel world, stairs, per-band loudest-path
+propagation, 3D line of sight.
+
+**Proven in the Python build and awaiting port:** superposition and loop
+closure, addressing across 72 sub-locations, echolocation to an empty post,
+the leader handoff and fold-out, the inversion cascade, attraction by
+complementarity, the three detection channels, masking, least-detection
+routing, and map-free navigation.
+
+**Not built at all:** everything the commander touches. What an order looks
+like, what a commander reasons over, how orders are authored. Deliberately —
+these come after the map and resonance mechanics settle.
+
+### Open, and Will's to rule
+
+- what a commander is allowed to write, and what authors it
+- what ends a strike-shaped order, if such a thing exists
+- how fire and hazards enter an order
+- whether own-state conditions (ammo and the like) exist beside three
+  mechanisms that are all field-audible
+- whether an order needs a guaranteed exit at all, under a gradient
+- how the map divides into its 12 regions and 6 posts each
+- how a part is addressed to specific men (§31's open question)
+- the new canonical fixture, to replace the dead 10 am order
