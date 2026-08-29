@@ -1,13 +1,17 @@
-# PROPOSAL — The Resonance Command System
+# The Resonance Command System
 
-**Status: PROPOSITIONAL. Not ruled, not implemented, not adopted.**
-Author: Will, 26 Aug 2026. Transcribed by Claude.
+**Status: RULED THE DEFAULT (Will, 26 Aug 2026).** This is the primary design
+for AI logic and unit behaviour. Author: Will. Transcribed by Claude.
 
-This document is deliberately self-contained and quarantined. The ruled
-design — the discrete order grammar in `orders.py` with its validator,
-lifecycle and 147 green tests — remains **the live system** and is untouched
-by anything written here. If resonance proves the wrong direction, delete
-this file and nothing else changes.
+*(This document opened as a quarantined proposal. §25 ruled resonance the
+AI-logic backend with human orders translated into it; Will confirmed on
+26 Aug that resonance is the default system. Tests VALIDATE that decision —
+they are not a gate on it.)*
+
+**Fallback retained.** The discrete order grammar in `orders.py`, its
+validator, lifecycle and 147 green tests remain in the repo and untouched, so
+the original design is recoverable if resonance fails in practice. It is no
+longer the primary.
 
 Will's framing: *"I'm working out the details as I go, so we will have to see
 how this system works in practice and adjust or amend if required."*

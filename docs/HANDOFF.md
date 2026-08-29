@@ -12,7 +12,7 @@
 | `docs/memos/ESCALATION_LADDER.md` | 20-row ladder + gap register with statuses |
 | `docs/memos/MEMO_2026-08-25_comms_and_spawn.md` | comms, spawn, the two memories |
 | `docs/memos/MEMO2_2026-08-25_units_engines_fire.md` | units, ledger, engines, fire, ranging |
-| `docs/memos/PROPOSAL_resonance_command.md` | **PROPOSITIONAL** — the resonance system, quarantined |
+| `docs/memos/PROPOSAL_resonance_command.md` | **THE DEFAULT SYSTEM** — resonance: AI logic, perception, unit behaviour |
 | `src/fortresslab_mini/config_balance.py` | every provisional number, all floats, LLM-sweep knobs |
 
 ## Working process
@@ -71,6 +71,14 @@ a unit · sally as a pure order template · dig sound-presence for counter-minin
 
 **Note:** OBSCOST and DMGMODEL are **closed** — the first by the resonance
 proposal's least-detection routing, the second by angle-of-attack.
+
+## Primary design (ruled 26 Aug)
+**Resonance is the default system** for AI logic, perception and unit
+behaviour. The order grammar (`orders.py`) is retained as the authoring
+interface and as a fallback, not as the runtime. Build order: field runtime →
+compiler (grammar order -> performance) → conformance harness proving the two
+agree. A new canonical order fixture is needed for that harness; the 10 am
+order is dead (the clock was scrapped).
 
 ## Next build rungs, in agreed order
 1. **Blocking fixes**: GUARDLOC + SELFORD.
