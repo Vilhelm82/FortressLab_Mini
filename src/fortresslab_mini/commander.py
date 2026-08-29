@@ -19,8 +19,8 @@ score.py, all of which a unit can hear or know of itself.
 
 from collections import deque
 
-from fortresslab_mini.score import (attrition, cancellation, note, score,
-                                    silence, validate_score)
+from fortresslab_mini.score import (attrition, cancellation, clear, note,
+                                    score, silence, spent, validate_score)
 
 CONFIG = {
     "decay": 0.97,          # per-tick freshness discount on a sighting
@@ -131,11 +131,10 @@ def hold_score(area):
 
 
 def strike_score(area):
-    """Go and remove the interference.
-
-    GAP: what ends a strike is not ruled. Until it is, a strike carries only
-    the attrition note, so it is expressible without inventing a condition."""
-    return score(area, [note(attrition(1, 2), label="halved")],
+    """Go and remove the interference. Richness dies when the opposition is
+    gone, or when we are halved."""
+    return score(area, [note(clear("enemy"), label="cleared"),
+                        note(attrition(1, 2), label="halved")],
                  kinds=("attack", "move"))
 
 
