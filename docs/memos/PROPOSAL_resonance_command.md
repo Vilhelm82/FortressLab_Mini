@@ -629,3 +629,68 @@ naturally omnidirectional — you hear behind you. Either:
 
 This is the last ruled mechanic the resonance system has not yet accounted
 for.
+
+---
+
+## 19. Beam vs wave, and dB gating (Will, 26 Aug) — facing resolved
+
+**Perception is directional and propagates as a BEAM, not a wave.** Units in
+direct line of sight are in that beam.
+
+**Hearing propagates omnidirectionally as a wave, but is a RATIO to
+perception.** A unit hearing an enemy to his right while looking at one
+directly ahead **stays focused on the one he sees** until the ratio tips
+toward the heard enemy being the more urgent focus.
+
+**The strength of that ratio scales with angle off 0°.** At 180° the ratio is
+weakest — so directly behind is **the last direction a unit reacts to**.
+
+### This re-derives the ruled perception model rather than replacing it
+
+- front / periphery / rear arcs = **angular weighting on the hearing ratio**
+- peripheral degradation = the ratio falling with angle
+- **the stealth kill survives**: approaching from directly behind gives the
+  weakest possible ratio, so a facing-away target reacts last
+
+The last unaccounted ruled mechanic is now accounted for.
+
+### dB gating — the stealth dial
+
+**Commanders can gate the dB level of any unit.** To hold an area with reduced
+activity, gate the dB of the units stationed there: they **reduce the radius
+their singing travels**.
+
+This tunes how stealthy a unit is **while keeping it inside the resonating
+system** — a quiet unit is still a singer, not an exception.
+
+**A stealth unit sings softly and hones in on a specific complex wave** — for
+example the enemy commander, who **emits the source of the signal and is
+therefore the richest signal on the map**. Such a unit is then *super picky*
+about where it navigates and who it exposes itself to, because it is attracted
+only to the signal matching its orders.
+
+### Consequences
+
+**The decapitation play gets its mechanism.** Will identified the sneak-in
+commander-kill as emergent strategy on 25 Aug, before this system existed. It
+now falls out: a quiet company tuned to the commander's signature, hunting the
+loudest thing on the map while emitting almost nothing. **Fifth ruled or
+observed behaviour the resonance system re-derives without being designed for
+it.**
+
+**Stealth has a real price.** Dominance of the performance scales with how far
+and loud your units propagate (§13). A gated unit contributes less to holding
+the auditorium. Quiet units are *invisible and inaudible in both directions* —
+they buy concealment with presence.
+
+**Picky navigation is a behaviour, not a rule.** A stealth unit's narrow
+attraction means it refuses most routes, which is precisely the phased,
+cautious approach the decapitation play needs — with nothing scripting caution.
+
+### OPEN QUESTION (not assumed)
+
+**Can a commander gate his own dB — and if so, what happens to the chain?**
+The chain maintains signal amplitude from the commander's source. If he goes
+quiet to avoid being hunted, does his whole army go quiet with him — trading
+army-wide dominance for personal concealment? That would be an elegant
+tradeoff, but it is inference, not a ruling.
