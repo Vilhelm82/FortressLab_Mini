@@ -25,11 +25,10 @@ below modulates or echoes, never originates.
 The wrong location is the wrong tuning: a badly built cabinet that muffles or
 hollows out the signal's range.
 
-**Phase is what separates the sides.** Home and Away sing 180° out of phase,
-and that opposition is the whole distinction — there is no separate key or
-mode to tell them apart. Both read the same map addresses, so no two
-commanders can disagree about what a place sounds like, and each hears the
-other only as cancellation of its own song.
+**Phase separates the sides.** Home and Away sing 180° out of phase, so each
+hears the other as cancellation of its own song. Both read the same map
+addresses, and no two commanders can disagree about what a place sounds
+like.
 
 ---
 
