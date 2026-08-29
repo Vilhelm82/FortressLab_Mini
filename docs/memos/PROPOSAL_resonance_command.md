@@ -1428,7 +1428,6 @@ these come after the map and resonance mechanics settle.
 ### Open, and Will's to rule
 
 - what a commander is allowed to write, and what authors it
-- what ends a strike-shaped order, if such a thing exists
 - how fire and hazards enter an order
 - whether own-state conditions (ammo and the like) exist beside three
   mechanisms that are all field-audible
