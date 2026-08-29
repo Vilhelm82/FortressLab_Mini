@@ -498,3 +498,71 @@ instruction are the same signal at two ranges.
 similarly will pull each other's units. That is a genuine mistake a commander
 can make, and it is a *desirable* one: it makes the finite vocabulary bite,
 and it makes clarity of command a skill rather than a given.
+
+---
+
+## 17. Scope, the ISCO, and absorption (Will, 26 Aug)
+
+**Scope of the system: ORDERS and PERCEPTION only. Combat remains exactly as
+ruled** — dead short, Chebyshev ≤ 1, both die, no HP.
+
+**The direction of destructive interference attracts the unit's focus.**
+
+**Location and orders prevent a unit abandoning its post**, because leaving
+degrades its own performance: **proximity to the post scales resonance
+amplitude.**
+
+### The ISCO
+
+A unit sits in a geodesic **ISCO around its resonating post**. An enemy's
+destructive interference creates a gravitational shift that **expands the ISCO
+outward to meet the enemy**.
+
+Archers skip the whole shift — they simply shoot the enemy once it is in range
+and perception. *(Archers are currently parked as a future implementation.)*
+
+### Absorption
+
+**Objects absorb all sound.** Walls and other structures **reflect no
+frequencies**. Therefore **perception is solely directional.**
+
+---
+
+### Consequences
+
+**The expensive branch of §12 is dead.** Total absorption means no room
+acoustics, no reflection precompute, no transfer-function caching. Occlusion
+and directional propagation only. The compute claim is now unconditional on
+that axis.
+
+**Engagement range becomes emergent — a leash with no leash rule.** How far a
+unit will chase is the ratio of post amplitude to interference amplitude.
+Nothing specifies pursuit distance; it falls out.
+
+**Discipline scales with post proximity.** A unit standing on its post has
+high amplitude and resists being drawn; a unit at the fringe of its post's
+influence is easily pulled. So **where the commander posts his men sets how
+disciplined they are** — and, one level up, the castle's geometry sets where
+posts can be. A design consequence, not a stat.
+
+**Ranged units hold formation; melee units get drawn out.** Archers satisfy
+the remove-the-interference drive without moving, so their ISCO never expands.
+One mechanism, two behaviours.
+
+**Walls preserve discipline.** With no reflection and full absorption, an
+enemy behind a wall produces no interference at all — so the wall protects the
+defender's *performance*, not just his body. Cover becomes a command property.
+
+### OPEN QUESTION (not assumed)
+
+Does absorption mean **strict line-of-sight propagation**, or does the signal
+travel along **open paths**, round corners, without reflecting?
+
+- *Strict LOS:* a unit can only be attracted to a post it can see. Very
+  restrictive inside a castle — a company could not navigate to a courtyard
+  post from outside the gate.
+- *Open-path:* the signal follows traversable air, which is the §12 condition
+  ("the field must follow walkable paths") and makes interior navigation work.
+
+This decides whether the resonance field is a visibility field or the existing
+Dijkstra cost field wearing new clothes.
