@@ -7,7 +7,6 @@ a conformance property; these tests pin the STRUCTURE — silences, orderings
 within a channel, gradients, fold behaviour — never the constants.
 """
 
-import pytest
 
 from fortresslab_mini.config_balance import RESONANCE as R
 from fortresslab_mini.resonance import (

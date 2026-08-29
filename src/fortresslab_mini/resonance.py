@@ -163,7 +163,6 @@ class Field:
         seen = self.grid.los(observer.pos, target.pos) and d <= R["beam_range"]
         looking = 4.0 / d if seen else 0.0                  # beam: full dB
 
-        own = self.hear(observer.pos)
         interference = 0.0
         for note in observer.notes:                          # phase overlap
             if any(n == note for n in target.notes):
@@ -183,13 +182,13 @@ class Field:
         hearing = (raw * (0.25 + 0.75 * cos(angle/2)**2)) if audible else 0.0
         hearing *= 2.0
 
-        felt = 0.0                                          # being looked at
+        # being looked at: how much the observer notices the target's beam
+        # landing on him. Silent when it arrives from behind the target's
+        # facing -- i.e. the target is looking away.
+        felt = 0.0
         if self.grid.los(target.pos, observer.pos) and d <= R["beam_range"]:
-            rear = self._angle_off_facing(target, observer.pos)  # via target
-            felt = 0.5 * max(0.0, cos(pi - rear) * -1)      # 0 at 180 deg
-            # felt is how much OBSERVER notices TARGET's beam on them:
             beam_on_me = self._angle_off_facing(target, observer.pos)
-            felt = 0.5 * max(0.0, cos(beam_on_me))          # silent behind
+            felt = 0.5 * max(0.0, cos(beam_on_me))
         return {"looking": looking, "interference": interference,
                 "hearing": hearing, "being_looked_at": felt}
 
