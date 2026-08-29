@@ -806,3 +806,50 @@ disoriented.
 **Cohesion emerges.** Units singing the same part reinforce each other's
 returns, so a company sees better than a lone man and a scattered remnant sees
 worst. No formation rule required — staying together is how you see.
+
+---
+
+## 22. Three detection channels, and masking (Will, 26 Aug)
+
+**The perception beam is itself detectable** — being looked at is felt. But
+the ratio strength from being beamed is **weaker than from being heard**.
+
+**A beam striking an enemy at 180° is silent.** So a unit sneaking up behind
+another does so undetected.
+
+**Hearing scales to proximity, and even at maximum range will draw an enemy's
+focus if no other signal is distracting them.**
+
+### The complete detection model
+
+| channel | ratio strength | notes |
+|---|---|---|
+| destructive interference | strongest | direction of focus; degrades performance and navigation |
+| hearing (omnidirectional wave) | scales with proximity | reaches at any range if nothing competes |
+| perception beam (being looked at) | weakest | **silent at 180°** |
+
+**The stealth kill is now doubly derived.** From directly behind, the target's
+hearing ratio is at its weakest angle *and* the attacker's beam registers as
+silence.
+
+### Masking — the diversion gets its mechanism
+
+Because a distant sound only draws focus **if no other signal is distracting
+them**, a louder signal nearby **masks** a quieter one.
+
+- On a noisy front, a stealth unit's residual sound is buried.
+- In a silent sector, even a faint far-off unit will eventually pull attention.
+
+**This inverts the intuitive route.** You do not sneak through the quiet part
+of the map — quiet is where you are heard. You sneak alongside the noise.
+
+Which gives the decapitation company a reason to *want* a loud engagement
+elsewhere, and gives the attacker a reason to stage one: **the diversion play,
+with an acoustic mechanism and nothing scripting it.** (Diversion emergence
+was already on the build roadmap as a test to be engineered; here it falls
+out.)
+
+**And it creates a genuine navigation optimum.** Noise means masking, but
+noise also means units. A sneaking company wants to be near enough to the
+racket to be buried by it and far enough from the men making it to avoid
+contact — a real trade with a non-trivial best answer, requiring no rule.
