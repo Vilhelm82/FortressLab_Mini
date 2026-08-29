@@ -1010,3 +1010,60 @@ vocabulary *desirable*. An order that cannot be sung is arguably an order the
 game should not permit — so the compiler doubles as a **legality filter**, and
 each failure is a decision: trim the grammar, or extend the resonance
 vocabulary.
+
+---
+
+## 26. Dyads, and why dissonance is DESIRABLE for the AI (26 Aug)
+
+**CONFIRMED (Will):** the second note of a dyad sits **above 123.47 Hz**. The
+area fundamental penetrates stone; the position specifier does not. 144
+addresses from one spawn point; 4,032 orders with release sets and dB levels.
+
+**Will's question:** must nearby locations share a key, or is dissonance a
+human-ear concern irrelevant to AI pathfinding?
+
+### Claude's answer: your doubt is right, and the truth is stronger
+
+**Dissonance is not merely irrelevant to the AI — it is what you want.**
+
+Consonance *is* shared harmonics. A perfect fifth sounds consonant precisely
+because the two tones' partials coincide. Coinciding partials means the two
+signals **overlap**, and overlap is exactly what makes them hard to tell
+apart. So the intervals that sound best together are the ones a unit can least
+easily separate.
+
+| interval | shared partials | to a human | to a unit |
+|---|---|---|---|
+| octave, fifth, major third | many | consonant | **confusable — worst addresses** |
+| tritone (6 semitones) | fewest | maximally dissonant | **maximally distinguishable — best** |
+
+**So same-key neighbours are the worst case, not the safe one.** Diatonic
+chords in a shared key overlap heavily by construction. Will's music-theory
+instinct would have actively degraded the addressing.
+
+**Recommendation: tritone-separate physically adjacent areas.** Assignment
+becomes graph colouring on the castle layout, solved once at seal.
+
+### One real physical concern that is NOT dissonance
+
+**Beating.** Two fundamentals a semitone apart (C 65.41 Hz, C♯ 69.30 Hz) beat
+at ~3.9 Hz — a slow amplitude modulation. The enemy signal is 180° out of
+phase and produces **partial cancellation**, which is also an amplitude drop.
+A unit could mistake friendly beating for enemy interference.
+
+Wide separation fixes this too: a tritone apart (65.41 vs 92.50 Hz) beats at
+~27 Hz, far outside anything that could be confused with a closing enemy.
+**Second independent argument for the same rule.**
+
+### Where the human ear DOES matter
+
+The **sonified war room**. If the audio UI is ever built, a player listening
+to his castle wants something legible, not a wall of tritones. But §25 already
+ruled the music never surfaces — the UI is a translation layer, so the backend
+can address in tritones while the interface voices it however sounds right.
+Two requirements, cleanly separable.
+
+### Non-issue, checked
+
+"Harmonisation" throughout this proposal means *matching my sheet music*, not
+*sounding consonant*. No conflict.
