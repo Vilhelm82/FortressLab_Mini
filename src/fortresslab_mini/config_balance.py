@@ -107,3 +107,24 @@ TENT = {
     "health_pct": 100.0,          # wooden structure: burnable
     "rebuild_ticks": 120.0,       # labour-rebuildable; spawning stops while down
 }
+
+RESONANCE = {
+    # base pitch is arbitrary (Will, 26 Aug) — one just has to be picked
+    "base_hz": 32.70,          # bottom of the LOCATION octave
+    "layer_mult": {"LOC": 1, "LEAD": 2, "SPEC": 4, "EXT": 8},
+    # depth is authority: lower layers pull harder and reach further
+    "layer_weight": {"LOC": 3.0, "LEAD": 2.0, "SPEC": 1.2, "EXT": 1.0},
+    # per-step amplitude decay by layer (highs die faster = distance LPF)
+    "decay": {"LOC": 0.97, "LEAD": 0.94, "SPEC": 0.88, "EXT": 0.80},
+    # wall transmission per band layer (stone kills detail, timber leaks it)
+    "stone_tx": {"LOC": 0.6, "LEAD": 0.0, "SPEC": 0.0, "EXT": 0.0},
+    "timber_tx": {"LOC": 0.9, "LEAD": 0.6, "SPEC": 0.5, "EXT": 0.4},
+    "hpf_start_hz": 32.70,     # cascade sweeps from the BOTTOM (proposal §28)
+    "hpf_mult_per_tick": 1.06, # geometric — ~12 ticks per octave
+    "echo_floor": 1e-4,        # weakest usable echolocation return
+    "mask_ratio": 0.25,        # audible only if amp > ratio x rest-of-ambient
+    "hear_floor": 1e-5,        # absolute audibility floor in silence
+    "beam_range": 10.0,        # perception beam reach (cells)
+    "lambda_obs": 0.3,         # detection weight in least-detection routing
+    "beam_halfangle": 0.5236,  # rad (~30 deg) — perception cone half-width
+}
