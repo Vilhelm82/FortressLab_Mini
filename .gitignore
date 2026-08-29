@@ -8,3 +8,4 @@ dist/
 replays/
 __pycache__/
 *.pyc
+rust/target/

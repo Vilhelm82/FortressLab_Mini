@@ -1,0 +1,13 @@
+[package]
+name = "fortress_sim"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "fortress_sim"
+crate-type = ["lib"]
+
+[dependencies]
+
+[profile.release]
+opt-level = 3

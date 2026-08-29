@@ -16,9 +16,10 @@ from math import atan2, cos, pi
 
 from fortresslab_mini.config_balance import RESONANCE as R
 
+
 SEMI = 2 ** (1 / 12)
 MAJOR_DEGREES = (2, 4, 5, 7, 9, 11)          # the 6 non-root scale degrees
-DIRS8 = ((-1,-1),(-1,0),(-1,1),(0,-1),(0,1),(1,-1),(1,0),(1,1))
+# movement neighbourhood comes from the world (stairs decide levels)
 
 
 def freq(layer, semitone):
@@ -42,73 +43,6 @@ def extension(region, degree_ix):
     return ("EXT", freq("EXT", (region + MAJOR_DEGREES[degree_ix]) % 12))
 
 
-class Grid:
-    """walkable topology + materials. material: None | 'stone' | 'timber'."""
-
-    def __init__(self, w, h, stone=(), timber=()):
-        self.w, self.h = w, h
-        self.stone, self.timber = set(stone), set(timber)
-
-    def cells(self):
-        return [(x, y) for x in range(self.w) for y in range(self.h)]
-
-    def open(self, c):
-        return c not in self.stone and c not in self.timber
-
-    def band_field(self, src, layer):
-        """Amplitude multiplier per cell for ONE band, by the loudest path.
-
-        Sound does not take the shortest route; it takes the route that
-        delivers the most energy. A long way round through open air beats a
-        short way through stone whenever the material eats more than the
-        extra distance does. Dijkstra in -log(amplitude) space, per band,
-        because decay and transmission both differ by band: the bass goes
-        through walls, the specifier only round them.
-        """
-        import heapq
-        from math import log, exp
-        step = -log(R["decay"][layer])
-        tx = {"stone": R["stone_tx"][layer], "timber": R["timber_tx"][layer]}
-        wall = {}
-        for m, v in tx.items():
-            wall[m] = float("inf") if v <= 0.0 else -log(v)
-
-        cost = {src: 0.0}
-        pq = [(0.0, src)]
-        while pq:
-            c, cell = heapq.heappop(pq)
-            if c > cost.get(cell, float("inf")):
-                continue
-            for dx, dy in DIRS8:
-                n = (cell[0] + dx, cell[1] + dy)
-                if not (0 <= n[0] < self.w and 0 <= n[1] < self.h):
-                    continue
-                mat = ("stone" if n in self.stone else
-                       "timber" if n in self.timber else None)
-                w = wall[mat] if mat else 0.0
-                if w == float("inf"):
-                    continue
-                nc = c + step + w
-                if nc < cost.get(n, float("inf")):
-                    cost[n] = nc
-                    heapq.heappush(pq, (nc, n))
-        return {k: exp(-v) for k, v in cost.items()}
-
-    def los(self, a, b):
-        """Bresenham; blocked by any material cell."""
-        (x0, y0), (x1, y1) = a, b
-        dx, dy = abs(x1-x0), abs(y1-y0)
-        sx, sy = (1 if x0 < x1 else -1), (1 if y0 < y1 else -1)
-        err, x, y = dx - dy, x0, y0
-        while (x, y) != (x1, y1):
-            e2 = 2*err
-            if e2 > -dy: err -= dy; x += sx
-            if e2 < dx:  err += dx; y += sy
-            if (x, y) != (x1, y1) and not self.open((x, y)):
-                return False
-        return True
-
-
 class Emitter:
     """Anything that sings: a tuned location, a leader, a unit.
     notes: iterable of (layer, freq). sign: +1 Home, -1 Away.
@@ -127,15 +61,20 @@ class Field:
     """Steady-state superposition. hear() is a pure function of position —
     path-independent by construction; the conformance tests prove it."""
 
-    def __init__(self, grid, emitters):
-        self.grid = grid
+    def __init__(self, world, emitters):
+        self.world = world
         self.emitters = list(emitters)
         self._dists = {}
 
     def _dist(self, src, layer):
         key = (src, layer)
         if key not in self._dists:
-            self._dists[key] = self.grid.band_field(src, layer)
+            tx = {"earth": 0.0,
+                  "stone": R["stone_tx"][layer],
+                  "timber": R["timber_tx"][layer],
+                  "stair": R["stone_tx"][layer]}
+            self._dists[key] = self.world.band_field(
+                src, R["decay"][layer], tx)
         return self._dists[key]
 
     def _amp(self, e, note, at):
@@ -171,7 +110,13 @@ class Field:
         """The four channel strengths of `observer` noticing `target`."""
         d = max(1, abs(target.pos[0]-observer.pos[0]),
                    abs(target.pos[1]-observer.pos[1]))
-        seen = self.grid.los(observer.pos, target.pos) and d <= R["beam_range"]
+        # The beam is DIRECTIONAL: line of sight, within range, AND inside
+        # the cone. Height is in the coordinates, so a man on a tower sees
+        # over a curtain that blinds one standing beside it.
+        in_cone = self._angle_off_facing(observer, target.pos) \
+            <= R["beam_halfangle"]
+        seen = (in_cone and d <= R["beam_range"]
+                and self.world.los(observer.pos, target.pos))
         looking = 4.0 / d if seen else 0.0                  # beam: full dB
 
         interference = 0.0
@@ -197,8 +142,9 @@ class Field:
         # landing on him. Silent when it arrives from behind the target's
         # facing -- i.e. the target is looking away.
         felt = 0.0
-        if self.grid.los(target.pos, observer.pos) and d <= R["beam_range"]:
-            beam_on_me = self._angle_off_facing(target, observer.pos)
+        beam_on_me = self._angle_off_facing(target, observer.pos)
+        if beam_on_me <= R["beam_halfangle"] and d <= R["beam_range"] \
+                and self.world.los(target.pos, observer.pos):
             felt = 0.5 * max(0.0, cos(beam_on_me))
         return {"looking": looking, "interference": interference,
                 "hearing": hearing, "being_looked_at": felt}
@@ -243,14 +189,13 @@ class Field:
 
     def least_detection_route(self, start, goal, watchers):
         cost = {}
-        for c in self.grid.cells():
-            if not self.grid.open(c):
-                continue
+        for c in self.world.standing_cells():
             det = 0.0
             for w in watchers:
                 d = max(1, abs(c[0]-w.pos[0]), abs(c[1]-w.pos[1]))
-                if d <= R["beam_range"] and self.grid.los(w.pos, c) \
-                        and self._angle_off_facing(w, c) < R["beam_halfangle"]:
+                if d <= R["beam_range"] \
+                        and self._angle_off_facing(w, c) < R["beam_halfangle"] \
+                        and self.world.los(w.pos, c):
                     det += 4.0 / d
             cost[c] = 1.0 + R["lambda_obs"] * det * 50.0
         import heapq
@@ -259,8 +204,7 @@ class Field:
             dc, c = heapq.heappop(pq)
             if c == goal: break
             if dc > dist.get(c, 1e18): continue
-            for dx, dy in DIRS8:
-                n = (c[0]+dx, c[1]+dy)
+            for n in self.world.steps_from(c):
                 if n not in cost: continue
                 nd = dc + cost[n]
                 if nd < dist.get(n, 1e18):
