@@ -1428,9 +1428,8 @@ these come after the map and resonance mechanics settle.
 ### Open, and Will's to rule
 
 - what a commander is allowed to write, and what authors it
-- how fire and hazards enter an order
-- whether own-state conditions (ammo and the like) exist beside three
-  mechanisms that are all field-audible
+- whether own-state conditions exist beside three mechanisms that are all
+  field-audible
 - whether an order needs a guaranteed exit at all, under a gradient
 - how the map divides into its 12 regions and 6 posts each
 - how a part is addressed to specific men (§31's open question)
