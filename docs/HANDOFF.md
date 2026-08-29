@@ -101,3 +101,51 @@ Will's flat war-room playtest (interrupted by a since-fixed IndexError —
 re-seal). Watchmen and messenger routes are placeable but inert. The move
 manifest for the LLM phase (thin legal-move list, distinct from the
 implementation spec) is unwritten — writing it is itself a fresh-player test.
+
+
+---
+
+## Claude error log — the resonance design
+1. Imported damage into interference — units have no HP.
+2. Built a bloodlust-handoff story on top of that import.
+3. Audited the water metaphor literally.
+4. Recommended a War College adapter, assuming resonance replaced authoring.
+5. Recommended avoiding consonance (§26) — retracted here.
+6. Kept restating the sonified war room after §25 ruled it out.
+7. Claimed in §31 that the 10 am order "compiles in full" — after writing the
+   §14 ruling that scrapped the clock and killed that fixture.
+
+Pattern: proposing an idea, then treating it in later sections as though it
+were ruled. **Every Claude suggestion in this document is flagged as such; if
+it is not flagged, Will ruled it.**
+
+8. Claimed the 10 am order "compiles in full" after §14 had scrapped the clock.
+9. Treated resonance's adoption as still pending after Will had ruled it default.
+10. Invented three order shapes (hold / watch / **strike**) to keep deleted tests
+    passing, then listed them back as open design questions. "Strike" resurfaced
+    three times after being killed.
+
+**Pattern:** something Claude writes down starts reading like context rather
+than a guess, and returns whenever the material is summarised. Rule: an
+unflagged line is Will's; if Claude proposed it, it says so.
+
+---
+
+## Where the build stands (29 Aug)
+
+Python retired. The sim is **Rust** — `rust/`, a plain library crate, std
+only, no engine — which **Godot 4** will wrap through GDExtension for the iOS
+and Android build, PC later. The engine stays a thin viewer: the sim emits the
+sparse deviation log and the renderer plays it back, so the engine choice is
+reversible.
+
+`cargo test` — 24 green, 1 ignored (the plateau finding, see RESONANCE.md §12).
+
+| module | what it is |
+|---|---|
+| `world.rs` | voxel columns, stairs, per-band loudest-path propagation, 3D line of sight |
+| `balance.rs` | layers, decay, transmission — all provisional, the sweep's to set |
+| `field.rs` | notes and addressing, emitters, spectra, four perception channels, echolocation, step-by-ear, the cascade, attraction, least-detection routing |
+| `devmap.rs` | the development castle in voxels |
+
+**Not built at all:** everything the commander touches.
