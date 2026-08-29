@@ -452,3 +452,49 @@ places first.
 
 **Unresolved:** whether saturation is per part (voice counts) or some other
 mechanism.
+
+---
+
+## 16. Addressing — the map is a band, not one note (Will, 26 Aug)
+
+**Different units sing different chords with different fundamentals.** The map
+is not one sustained note; it is a band of instruments playing different
+roles. All in harmony — but that harmony can be built from any chord, note or
+pitch combination, and **each company is assigned a combination that attracts
+it specifically to where the commander requires it.**
+
+**Isolated units still sing a note** that can match and fold into another
+company.
+
+Two locations may share some overlap in what notes resonate, but **the
+location carries the fundamentals, and the lowest notes push the most air.**
+So filtering units to specific locations can be fine-tuned — up to a **ceiling
+of how distinct each location and order set can be made distinguishable** to
+the units you wish to control there.
+
+### Consequences
+
+**This resolves §15's distribution question — by addressing, not saturation.**
+Claude flagged that positive feedback would clump every unit onto the single
+richest point. It does not arise: there is no single magnet, because units are
+not all listening for the same thing. The richest location *for company A* is
+not the richest *for company B*. Capacity limits and voice counts are
+unnecessary. **Distribution is a design act by the commander — he assigns the
+chords — not an emergent physics.** Two companies given the same address will
+converge; that is then his choice, not an artefact.
+
+**Fold-in becomes selective.** The ruled auto-rally (a stray unit joins an
+under-strength company within detection) gets its mechanism: a self-directed
+unit has stopped emitting but still sings a residual note, and a company whose
+chord contains that note can absorb it. So remnants flow to *compatible*
+companies rather than the nearest one.
+
+**Addressing is coarse-to-fine, by physics.** Bass travels furthest, so at
+long range a unit can only tell *which location*. The upper structure resolves
+on approach, telling it *which part* and *what conditions*. Navigation and
+instruction are the same signal at two ranges.
+
+**The failure mode is chord collision** — two locations addressed too
+similarly will pull each other's units. That is a genuine mistake a commander
+can make, and it is a *desirable* one: it makes the finite vocabulary bite,
+and it makes clarity of command a skill rather than a given.
