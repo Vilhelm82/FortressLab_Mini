@@ -1427,8 +1427,13 @@ these come after the map and resonance mechanics settle.
 
 ### Open, and Will's to rule
 
-- what a commander is allowed to write, and what authors it
-- whether an order needs a guaranteed exit at all, under a gradient
-- how the map divides into its 12 regions and 6 posts each
-- how a part is addressed to specific men (§31's open question)
-- the new canonical fixture, to replace the dead 10 am order
+- **what a commander is allowed to write, and what authors it.** Everything
+  else in the command layer waits behind this.
+- **how the map divides into its 12 regions and 6 posts each.** Auto-assigned
+  by the game (ruled); the division itself is undesigned.
+
+Settled since this document was written: parts are addressed by **type and
+count**, never by identity (§31) — so a part is a filter over the roster and
+heals itself when a man falls. And the guaranteed-exit requirement was a rule
+of the deleted grammar; under a gradient a unit always has somewhere to go, so
+it is not carried forward.
