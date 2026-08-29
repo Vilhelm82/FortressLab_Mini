@@ -1067,3 +1067,68 @@ Two requirements, cleanly separable.
 
 "Harmonisation" throughout this proposal means *matching my sheet music*, not
 *sounding consonant*. No conflict.
+
+---
+
+## 27. RETRACTION: the tritone recommendation was wrong (26 Aug)
+
+Will pushed back on §26 and is right. **Claude's "avoid consonance,
+tritone-separate adjacent areas" recommendation is withdrawn**, for two
+reasons — one conceptual, one measurable.
+
+### 1. A chord is one address, not competing addresses
+
+Claude analysed each pitch as an independent address needing separation. It is
+not. Within a location the notes are **semantic slots in a single harmonic
+object**, and consonance is what makes them *fuse* so the structure can be
+read. That is what a chord is for.
+
+**Will's worked example — two companies at the front gate:**
+
+| | Company A (parapets) | Company B (ground level) |
+|---|---|---|
+| bass | gate fundamental | gate fundamental |
+| dyad | parapet specifier | ground specifier |
+| release | gate lost **AND** archers out of ammo | gate lost |
+
+The **major 5th** carries gate integrity: when the gate falls it goes quiet,
+releasing Company B and satisfying half of Company A's condition. The **major
+7th** carries ammo state: when the archers run dry it stops resonating,
+releasing the rest of Company A.
+
+Meanwhile attackers receive bass + dyad focus point, with **extensions
+nominating tactics** — the major 3rd being the gate itself, and the target of
+the battering ram.
+
+All of it coexists in the same acoustic medium without confusion, because
+these are components of structured addresses, not rivals.
+
+### 2. The 12 fundamentals are harmonically clean by construction — measured
+
+Claude's confusability argument assumed **pitch-class** matching. With
+**exact-frequency** matching it collapses, and the numbers say so:
+
+```
+fundamental range      : 65.41 .. 123.47 Hz  (1.888x — under one octave)
+lowest 2nd harmonic    : 130.82 Hz
+highest fundamental    : 123.47 Hz
+=> no harmonic of any fundamental lands on any other fundamental
+closest approach       : 7.35 Hz  (C x2 = 130.82 vs B = 123.47)
+```
+
+Because all twelve fit **inside a single octave**, the second harmonic of the
+lowest is already above the highest. The address space is self-protecting.
+Choosing exactly one bass-clef octave was the thing that made it so.
+
+### 3. The beating concern also falls
+
+A unit is a **narrow-band matched filter** on its own assigned frequency, not
+a general listener. Beating between two *other* fundamentals never enters its
+reading. §26's semitone-beating worry applied only to a listener hearing
+everything at once, which no unit is.
+
+**Standing after this retraction:** §26's confirmation of the dyad specifier
+above the stone cutoff stands. Its dissonance recommendation, its graph-
+colouring proposal and its beating argument are all withdrawn. The sonified
+war-room note survives — that layer is for human ears and can be voiced
+separately.
