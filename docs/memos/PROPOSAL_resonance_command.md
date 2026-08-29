@@ -908,3 +908,49 @@ Maximum harmonisation and least detection could pull against each other. The
 natural resolution: **harmonisation sets the destination, least detection
 selects the route.** Where to be is the score; how to get there is the
 gradient.
+
+---
+
+## 24. Reproducibility — the line in the sand (Will, 26 Aug)
+
+**Claim:** games become completely reproducible, because every grid coordinate
+need only record **the amount of signal deviation off baseline it received and
+at what tick** — like a finger drawing a line in the sand.
+
+**Assessment: correct, and stronger than a replay log.**
+
+### Why it is small
+
+"Deviation off baseline" is the load-bearing phrase. Most cells at most ticks
+are *at* baseline and record nothing. The trace is **sparse** — an event log
+of `(cell, tick, band, deviation)` — and nothing is written where nothing
+happened. A quiet sector costs no storage at all.
+
+This composes with determinism already ruled: **no RNG anywhere** (engine
+accuracy is convergence, not scatter), so the same trace replays identically.
+
+### Why it is more than a replay
+
+The same substrate serves three purposes that were previously three systems:
+
+| view | what it is |
+|---|---|
+| **replay trace** | the deviation log, played back |
+| **intelligence** | what a unit heard = the deviations reaching its cell |
+| **the war-room quilt** | a commander's accumulated subset of that log |
+
+The messenger's logbook is a **set of recordings**; the belief field consumes
+deviations directly; the trace-and-scrub visualiser (already on the roadmap)
+becomes a read of the same data. The holonomy instrument computes loop
+residuals on it natively.
+
+### The one honest caveat
+
+The deviation log is **derived state**. It gives perfect *playback* and
+perfect *verification* — you can check any claimed game against it — but not
+*branching*. To ask "what if the commander had decided otherwise", you still
+need the **seed**: initial geometry, camp siting, and the sheet music issued.
+
+Both are worth keeping, and both are tiny. The seed is a few hundred bytes;
+the trace is sparse. Between them the game is fully reconstructible and fully
+re-explorable.
