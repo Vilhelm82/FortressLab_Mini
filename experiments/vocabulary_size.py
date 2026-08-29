@@ -1,74 +1,58 @@
 """
-How many distinguishable orders can the resonance system express?
+How many distinct orders can the resonance system express?
 
-The answer has two parts and they differ by orders of magnitude:
-  1. GLOBAL vocabulary  — how many distinct performances exist at all
-  2. LOCAL simultaneous — how many can sound near each other and stay
-                          individually identifiable
+REVISED (Will, 26 Aug): all units spawn at the SAME location and head out from
+there, so a unit must be able to tell every location apart from one origin.
+Therefore **every location needs a globally unique fundamental** — no spatial
+reuse. Both teams share the same location vocabulary; only the phase differs.
+The front gate resonates the same fundamental for everyone.
 
-(2) is the number that actually bounds play, and (1) is reused spatially, the
-way a cellular network reuses frequencies outside the interference radius.
+So commanders do NOT choose notes. They choose WHERE and WHAT CONDITIONS; the
+game auto-assigns frequencies. Two commanders can never disagree about what a
+location sounds like.
 """
-from itertools import combinations
 
-SEMITONES = 12
-MAJOR_SCALE = (0, 2, 4, 5, 7, 9, 11)      # Home; Away uses the minor set
+SEMITONES = 12          # pitch classes = the address space
+RELEASES = 2 ** 3 - 1   # 3 ruled mechanisms (cancellation, attrition, silence)
+DB_LEVELS = 4           # full / reduced / quiet / near-silent
+PARTS = 4               # voices within a company (sergeant's licence, future)
 
-
-def chords_in_one_key(min_notes=3, max_notes=6):
-    """Rooted chords drawn from one diatonic scale."""
-    n = 0
-    for root in MAJOR_SCALE:
-        others = [p for p in MAJOR_SCALE if p != root]
-        for k in range(min_notes - 1, max_notes):
-            n += len(list(combinations(others, k)))
-    return n
+# Confusability within the 12: a fundamental's own harmonic series contains
+# its octave (2nd), its fifth (3rd), its major third (5th). Those intervals
+# partially mask; the tritone shares least.
+HARMONIC_COLLISIONS = {1: "octave-equivalent (2nd harmonic)",
+                       7: "perfect fifth (3rd harmonic)",
+                       4: "major third (5th harmonic)"}
 
 
-def report():
-    per_key = chords_in_one_key()
-    keys = SEMITONES                       # 12 major keys for Home
-    chord_space = per_key * keys
-
-    releases = 2 ** 3 - 1                  # 3 ruled mechanisms, >=1 required
-    db_levels = 4                          # full / reduced / quiet / near-silent
-    parts = 4                              # voices within a company
-
-    global_vocab = chord_space * releases * db_levels * parts
-
-    print("GLOBAL VOCABULARY")
-    print(f"  rooted chords per key (3-6 notes) : {per_key:,}")
-    print(f"  x 12 keys                          : {chord_space:,}")
-    print(f"  x {releases} release sets (2^3-1)           : {chord_space*releases:,}")
-    print(f"  x {db_levels} dB gate levels                : "
-          f"{chord_space*releases*db_levels:,}")
-    print(f"  x {parts} parts per company            : {global_vocab:,}")
+def main():
+    print("ADDRESS SPACE")
+    print(f"  locations addressable        : {SEMITONES}")
+    print("  (octaves do NOT extend this — the 2nd harmonic of a bass tone IS")
+    print("   its octave, so octave-separated addresses genuinely collide)")
     print()
-
-    # Local limit: two performances collide if they share too many pitch
-    # classes. Require a minimum Hamming-style separation between chord sets.
-    print("LOCAL SIMULTANEOUS LIMIT (within one acoustic neighbourhood)")
-    for min_diff in (2, 3, 4):
-        # greedy max set of chords pairwise differing by >= min_diff notes
-        allc = []
-        for root in MAJOR_SCALE:
-            others = [p for p in MAJOR_SCALE if p != root]
-            for k in (2, 3):
-                for c in combinations(others, k):
-                    allc.append(frozenset((root,) + c))
-        chosen = []
-        for c in allc:
-            if all(len(c ^ d) >= min_diff for d in chosen):
-                chosen.append(c)
-        print(f"  min {min_diff} pitch-classes of separation -> "
-              f"{len(chosen)} co-audible orders")
+    print("COMMANDER'S CHOICE SPACE (per company)")
+    print(f"  where     : {SEMITONES} locations")
+    print(f"  when-to-leave : {RELEASES} release sets")
+    print(f"  loudness  : {DB_LEVELS} dB gate levels")
+    core = SEMITONES * RELEASES * DB_LEVELS
+    print(f"  -> {core:,} distinct orders")
+    print(f"  x {PARTS} parts per company    : {core * PARTS:,} (parts = future)")
     print()
-    print("Interpretation: the global vocabulary is effectively unbounded for")
-    print("this game's needs; the binding constraint is the co-audible set,")
-    print("which is small — and reused spatially outside the interference")
-    print("radius. Chord collision (proposal 16) is therefore a LOCAL failure,")
-    print("never a global one.")
+    print("SIMULTANEOUS ORDERS IN PLAY")
+    print(f"  hard ceiling = {SEMITONES} locations occupied at once, per side")
+    print("  practical = fewer; harmonically adjacent addresses mask:")
+    for iv, why in sorted(HARMONIC_COLLISIONS.items()):
+        print(f"    {iv:>2} semitones apart : {why}")
+    print("  6 semitones (tritone) shares least — maximally distinguishable")
+    print()
+    print("DESIGN CONSEQUENCE")
+    print("  A castle has at most 12 addressable places. Not 576 cells — 12")
+    print("  named locations, like squares on a board both players call by the")
+    print("  same name. Castle design must therefore resolve into a small set")
+    print("  of strategically meaningful posts, which is a constraint on the")
+    print("  PLAYER, not just on the engine.")
 
 
 if __name__ == "__main__":
-    report()
+    main()
