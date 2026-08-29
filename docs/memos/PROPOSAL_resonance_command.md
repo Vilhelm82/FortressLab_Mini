@@ -214,3 +214,73 @@ as a layer:
 5. A translation test: express the canonical 10 am order in resonance terms
    and check the resulting behaviour against the existing order tests. **That
    test is the adoption bar for this proposal.**
+
+---
+
+## 12. Computational cost — does "trivial overhead" track?
+
+Will's claim (26 Aug): once matured, this can be a sophisticated and powerful
+game logic system while being trivial in computation. **Assessment: yes, with
+two conditions and one hard limit.**
+
+### Why it is cheap — the field formulation
+
+If the field is **steady-state superposition**, nothing is ever propagated
+through time. Each tuned location contributes a closed-form attenuation per
+band; the field is the signed sum.
+
+Store a per-cell band vector. On a 24×24 map with 12 bands that is 6,912
+floats — a texture. Rebuild by splatting each source: 576 cells × ~20 tuned
+sources ≈ 11.5k splats per rebuild. Every unit then does an **O(1) lookup**
+plus 8 neighbour reads to find its gradient.
+
+Direct per-unit evaluation is comparably trivial: 130 units × 20 sources ×
+12 bands ≈ 31k multiply-adds per tick. Microseconds in numpy.
+
+Phase cancellation costs nothing extra: Home and Away are 180° apart, so
+opposition is a **signed sum per band**, not a simulation.
+
+**Compare what it replaces.** Every unit currently runs guard evaluation
+against the world each tick. The field turns that into a texture lookup. It
+is plausibly *cheaper* than the ruled system, not merely comparable.
+
+### Condition 1 — the field must follow WALKABLE paths, not acoustics
+
+If the bass tone propagates acoustically — through and over walls — units
+following the gradient will walk into stone. The field must attenuate along
+**traversable** paths.
+
+Which means the bass gradient is the **existing Dijkstra cost field**, with
+harmonic content layered on top. Already built, already cheap, already the
+thing the enemy brain uses. This is the single most important implementation
+note in this document.
+
+### Condition 2 — reflections must be precomputed, or dropped
+
+"The map becomes a resonance chamber" implies reflection off geometry. Real
+reflection is room acoustics: expensive, and the one part of this that could
+blow the budget.
+
+The escape is already ruled: **no wall repair**, so castle geometry is
+**monotone** — it only ever loses material. So the location→cell transfer can
+be precomputed once at seal and patched incrementally when a wall falls.
+Rare, local updates on static geometry.
+
+*If reflections are dropped entirely and attenuation is purely geodesic, cost
+is trivial with no precompute at all.*
+
+### The hard limit — bit depth, not cycles
+
+The real constraint is **not** computation. It is how many distinguishable
+orders fit in the frequency space. Finite bands and finite distinguishable
+intervals mean a finite vocabulary of expressible orders.
+
+This is the expressiveness gap of §9 restated in engineering terms: the
+system's ceiling is not speed, it is **how much order can be encoded in a
+chord** before two different orders become indistinguishable to a unit that
+can only listen.
+
+**Conclusion:** the compute assumption tracks. Steady-state superposition over
+the existing cost-field topology is cheap enough to be free. Whether the
+system is *sophisticated enough* is a separate question, and it is answered
+by the §11 translation test, not by profiling.
