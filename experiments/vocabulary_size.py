@@ -1,57 +1,55 @@
 """
-How many distinct orders can the resonance system express?
+Resonance address space — REVISED (Will, 26 Aug).
 
-REVISED (Will, 26 Aug): all units spawn at the SAME location and head out from
-there, so a unit must be able to tell every location apart from one origin.
-Therefore **every location needs a globally unique fundamental** — no spatial
-reuse. Both teams share the same location vocabulary; only the phase differs.
-The front gate resonates the same fundamental for everyone.
+Locations are AREA-specific and hierarchical, like a postal address:
+country / postcode / street / number. The 12 fundamentals are the chromatic
+bass-clef frequencies; a dyad names a position WITHIN that area.
 
-So commanders do NOT choose notes. They choose WHERE and WHAT CONDITIONS; the
-game auto-assigns frequencies. Two commanders can never disagree about what a
-location sounds like.
+Stone absorbs everything above B2 (123.47 Hz), and the low-pass crossover in
+open air moves with distance. So from far away a unit hears only the area;
+the position resolves on approach. Coarse-to-fine, by physics.
 """
 
-SEMITONES = 12          # pitch classes = the address space
-RELEASES = 2 ** 3 - 1   # 3 ruled mechanisms (cancellation, attrition, silence)
-DB_LEVELS = 4           # full / reduced / quiet / near-silent
-PARTS = 4               # voices within a company (sergeant's licence, future)
+BASS = {"C": 65.41, "C#/Db": 69.30, "D": 73.42, "D#/Eb": 77.78,
+        "E": 82.41, "F": 87.31, "F#/Gb": 92.50, "G": 98.00,
+        "G#/Ab": 103.83, "A": 110.00, "A#/Bb": 116.54, "B": 123.47}
 
-# Confusability within the 12: a fundamental's own harmonic series contains
-# its octave (2nd), its fifth (3rd), its major third (5th). Those intervals
-# partially mask; the tritone shares least.
-HARMONIC_COLLISIONS = {1: "octave-equivalent (2nd harmonic)",
-                       7: "perfect fifth (3rd harmonic)",
-                       4: "major third (5th harmonic)"}
+STONE_CUTOFF_HZ = 123.47      # everything above is fully absorbed by stone
+RELEASES = 2 ** 3 - 1         # cancellation / attrition / silence
+DB_LEVELS = 4
 
 
 def main():
-    print("ADDRESS SPACE")
-    print(f"  locations addressable        : {SEMITONES}")
-    print("  (octaves do NOT extend this — the 2nd harmonic of a bass tone IS")
-    print("   its octave, so octave-separated addresses genuinely collide)")
+    n = len(BASS)
+    print("THE 12 FUNDAMENTALS (bass clef chromatic) — the AREA component")
+    for k, v in BASS.items():
+        print(f"  {k:<6} {v:>7.2f} Hz")
     print()
-    print("COMMANDER'S CHOICE SPACE (per company)")
-    print(f"  where     : {SEMITONES} locations")
-    print(f"  when-to-leave : {RELEASES} release sets")
-    print(f"  loudness  : {DB_LEVELS} dB gate levels")
-    core = SEMITONES * RELEASES * DB_LEVELS
-    print(f"  -> {core:,} distinct orders")
-    print(f"  x {PARTS} parts per company    : {core * PARTS:,} (parts = future)")
+    print(f"Stone cutoff: {STONE_CUTOFF_HZ} Hz. Above it, nothing survives stone.")
     print()
-    print("SIMULTANEOUS ORDERS IN PLAY")
-    print(f"  hard ceiling = {SEMITONES} locations occupied at once, per side")
-    print("  practical = fewer; harmonically adjacent addresses mask:")
-    for iv, why in sorted(HARMONIC_COLLISIONS.items()):
-        print(f"    {iv:>2} semitones apart : {why}")
-    print("  6 semitones (tritone) shares least — maximally distinguishable")
+
+    print("ADDRESSING")
+    print(f"  areas (fundamental alone)      : {n}")
+    print(f"  positions per area (dyad)      : {n}")
+    print(f"  total addresses                : {n * n}")
+    print(f"  (triads would give             : {n ** 3:,})")
     print()
-    print("DESIGN CONSEQUENCE")
-    print("  A castle has at most 12 addressable places. Not 576 cells — 12")
-    print("  named locations, like squares on a board both players call by the")
-    print("  same name. Castle design must therefore resolve into a small set")
-    print("  of strategically meaningful posts, which is a constraint on the")
-    print("  PLAYER, not just on the engine.")
+
+    print("COMMANDER'S CHOICE SPACE")
+    total = n * n * RELEASES * DB_LEVELS
+    print(f"  {n*n} addresses x {RELEASES} release sets x {DB_LEVELS} dB levels "
+          f"= {total:,} distinct orders")
+    print()
+
+    print("WHY THIS WORKS FROM ONE SPAWN POINT")
+    print("  Far away  : only the bass carries -> you know the AREA")
+    print("  Approach  : the crossover rises   -> the POSITION resolves")
+    print("  Behind stone: area only, forever  -> position needs line of sight")
+    print()
+    print("INTELLIGENCE CONSEQUENCE")
+    print("  An enemy outside the walls hears WHICH AREA is being reinforced,")
+    print("  never which posts. Stone gives away the sector and hides the")
+    print("  detail — the exact fog structure the game already wants.")
 
 
 if __name__ == "__main__":
