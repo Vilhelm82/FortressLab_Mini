@@ -751,3 +751,58 @@ every location and each returns its own resonant signature. A unit then hears
 which cabinet would suit its part before anyone is standing in it. If that is
 wrong, some other mechanism is needed — because without one, units can only
 ever navigate toward posts that are already manned.
+
+---
+
+## 21. Echolocation, the pulse, and the sergeant's licence (Will, 26 Aug)
+
+**How does a bat navigate a cave?** The unit is its own source. It sings and
+navigates by what comes back. An empty cabinet is not silent, it is
+*unexcited* — and the unit excites it. §20's open question is closed, and
+Claude's ambient-excitation candidate is **retracted**.
+
+### Perception and hearing attenuate independently
+
+**Perception stays full dB while hearing and singing are attenuated** — a
+laser pointer instead of a floodlight.
+
+So a stealth unit **still sees where it is going**, and still catches any
+enemy that crosses its perception beam, while keeping wave propagation
+minimal. What it loses is acoustic *resolution*: with a soft voice, **only the
+lowest frequencies return**, so it navigates on bass alone and learns nothing
+of the higher-register detail.
+
+*Correction: Claude's "quiet means blind" (§20 response) was wrong. Quiet
+means low-resolution acoustic returns, not blindness — the beam is unaffected.*
+
+### The pulse
+
+**For a richer signal you must send a stronger pulse**, which returns the
+higher registers. **The trade-off: any enemy nearby also hears that pulse.**
+
+Active sonar. Detail is bought by announcing yourself, and the decision is
+made in the field, moment to moment.
+
+### The sergeant's licence
+
+**Sergeants can modulate and attenuate their company's signal, but can never
+change it.**
+
+This is the ruled principle *"scope attenuates, never amplifies"* and *"only
+commanders produce signal; every link modulates or echoes, never originates"*
+given an exact mechanism: modulation shapes delivery, attenuation reduces
+amplitude, and the harmonic content — the order itself — is untouchable.
+
+**FLAGGED AS A FUTURE ADDITION.** How and why a company leader would use this
+is not yet worked out. *(One natural candidate, unruled: the pulse decision
+above is exactly the kind of call a sergeant would make for his company.)*
+
+### Consequences
+
+**Interference degrades navigation, not just focus.** An enemy cancelling your
+bands takes your bearings as well as your attention. Being engaged is being
+disoriented.
+
+**Cohesion emerges.** Units singing the same part reinforce each other's
+returns, so a company sees better than a lone man and a scattered remnant sees
+worst. No formation rule required — staying together is how you see.
