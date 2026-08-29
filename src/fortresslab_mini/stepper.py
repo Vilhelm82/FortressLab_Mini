@@ -125,7 +125,11 @@ class Stepper:
         for m, tgt in intents.items():
             p = m.pos
             for _ in range(m.speed):
-                nxt = step_toward(self.grid, p, tgt)
+                if max(abs(tgt[0] - p[0]), abs(tgt[1] - p[1])) <= 1 \
+                        and self.grid.open(tgt):
+                    nxt = tgt          # already next door: no routing needed
+                else:
+                    nxt = step_toward(self.grid, p, tgt)
                 if nxt == p:
                     break
                 p = nxt
@@ -151,11 +155,69 @@ class Stepper:
 # --- goal functions: one per mechanic under test -----------------------------
 
 def seek_harmony(locations):
-    """Go wherever your own part resonates best (echolocation)."""
+    """Navigate by ear alone — no map, no pathfinding.
+
+    The specifier is the primary vector: it crosses no stone, so it reaches a
+    unit only along routes that are actually walkable, and its gradient points
+    back along the way it arrived. Where two neighbours answer equally, the
+    root breaks the tie: it penetrates stone and so holds a constant bearing
+    on the region.
+
+    A unit that can hear neither stands still. It has nothing to go on.
+    """
     def goal(m, field, world):
         best = field.navigate_target(m.e, locations)
-        return best.pos if best is not None else None
+        if best is None:
+            return None
+        spec = [n for n in set(m.e.notes) & set(best.notes) if n[0] == "SPEC"]
+        root = [n for n in set(m.e.notes) & set(best.notes) if n[0] == "LOC"]
+        if not spec:
+            return best.pos if not root else _root_step(m, field, best, root)
+        return _two_band_step(m, field, best, spec, root)
     return goal
+
+
+def _band(field, emitter, note, at):
+    return abs(field._amp(emitter, note, at))
+
+
+def _neighbours(field, p):
+    out = []
+    for dx, dy in DIRS8:
+        n = (p[0] + dx, p[1] + dy)
+        if 0 <= n[0] < field.grid.w and 0 <= n[1] < field.grid.h \
+                and field.grid.open(n):
+            out.append(n)
+    return out
+
+
+def _two_band_step(m, field, src, spec, root):
+    p = m.pos
+    cand = _neighbours(field, p)
+    if not cand:
+        return None
+    here = sum(_band(field, src, n, p) for n in spec)
+    scored = [(sum(_band(field, src, n, c) for n in spec), c) for c in cand]
+    best = max(s for s, _ in scored)
+    if best <= here + 1e-12:
+        return None                       # nothing louder within reach
+    top = [c for s, c in scored if abs(s - best) <= 1e-12]
+    if len(top) == 1 or not root:
+        return top[0]
+    return max(top, key=lambda c: sum(_band(field, src, n, c) for n in root))
+
+
+def _root_step(m, field, src, root):
+    """Bass only: a bearing, not a route. Used when the specifier is out of
+    reach — the unit knows which way the region lies and nothing more."""
+    p = m.pos
+    cand = _neighbours(field, p)
+    if not cand:
+        return None
+    here = sum(_band(field, src, n, p) for n in root)
+    scored = [(sum(_band(field, src, n, c) for n in root), c) for c in cand]
+    best, cell = max(scored)
+    return cell if best > here + 1e-12 else None
 
 
 def follow_then_fold(leader_mover, post):

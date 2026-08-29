@@ -171,3 +171,29 @@ def test_what_comes_through_the_gate_is_in_a_box():
     assert intruder.pos == bailey.pos
     ys = [p[1] for p in intruder.path if p[0] <= 18]
     assert min(ys) <= 5, "he had to go north over the spur to get out"
+
+
+# ------------------------------------- 7. navigation without map knowledge
+def test_the_unit_never_consults_the_map():
+    """seek_harmony now steps by ear: it samples its own neighbours on the
+    specifier and lets the root break ties. This test proves the walk is
+    local by forbidding the pathfinder entirely."""
+    import fortresslab_mini.stepper as st
+
+    inside = post(WAR_ROOM, 11, 0)
+    unit = Mover(Emitter((22, 4), inside.notes), goal=seek_harmony([inside]),
+                 name="man")
+    s = Stepper(grid(), [unit], statics=[inside])
+
+    real = st.step_toward
+    st.step_toward = lambda *a, **k: (_ for _ in ()).throw(
+        AssertionError("navigation consulted the pathfinder"))
+    try:
+        s.run(120, until=lambda x: unit.pos == WAR_ROOM)
+    finally:
+        st.step_toward = real
+
+    assert unit.pos == WAR_ROOM, unit.path[-6:]
+    assert (28, 12) in unit.path, "it still found the one door"
+    steps = zip(unit.path, unit.path[1:])
+    assert all(max(abs(a[0] - b[0]), abs(a[1] - b[1])) == 1 for a, b in steps)
