@@ -5,7 +5,7 @@ Every scenario is hand-placed on the development castle. No commander, no
 orders: a location is tuned, units hear it, and we watch what happens.
 """
 
-from fortresslab_mini.devmap import GATE_Y, REGIONS, WAR_ROOM, H, W, \
+from fortresslab_mini.devmap import GATE_Y, WAR_ROOM, H, W, \
     material_cells
 from fortresslab_mini.resonance import (Emitter, Grid, WanderingUnit,
                                         dyad_specifier, leader_note,

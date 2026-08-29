@@ -14,7 +14,7 @@ Contact stays as ruled — Chebyshev <= 1 between opposed movers kills both.
 
 from collections import deque
 
-from fortresslab_mini.resonance import DIRS8, Emitter, Field
+from fortresslab_mini.resonance import DIRS8, Field
 
 DEAD, ALIVE = "dead", "alive"
 
