@@ -45,6 +45,12 @@ sources**.
 
 ## 2. Locations, tuning, and navigation
 
+*(The earliest statement of this. Superseded in detail but not in substance:
+addressing was settled in §16 as a region root plus a diatonic dyad whose
+specifier sits above the stone cutoff, and "maximum harmonisation" was
+resolved in §35 into two bands doing two jobs. The mention of "duration"
+below predates §14, which scrapped the clock.)*
+
 Each location corresponds to a **bass tone**. Lower frequencies emit longer
 sine waves that travel further, so a unit can orient itself by moving toward
 **increasing resonant harmonic quality**.
