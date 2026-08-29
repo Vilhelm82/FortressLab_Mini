@@ -284,3 +284,101 @@ can only listen.
 the existing cost-field topology is cheap enough to be free. Whether the
 system is *sophisticated enough* is a separate question, and it is answered
 by the §11 translation test, not by profiling.
+
+---
+
+## 13. The Conductor and the Orchestra (Will, 26 Aug) — release conditions inverted
+
+**The finite vocabulary is DESIRED, not a limitation.** Order mechanics must
+be generalised and simple while still rich enough to cover the legal move set.
+Location is covered (§2). Release conditions are what needs hardening — and
+they should NOT be complex.
+
+### The framing
+
+**The Commander is the Conductor. The Castle is the Orchestra.** Both
+commanders compete to be the only performance audible in the auditorium.
+**Kill the commander and the castle goes silent.**
+
+Commanders use units to capture or remove areas of high resonance. The more
+units present at a high-resonance location, the more dominant your performance
+propagates. So dispatching units to those locations is high priority.
+
+**Dead units cannot sing. Units with no location of resonance have low
+amplitude.** A unit must be both alive and somewhere that contributes to the
+performance's volume.
+
+### The problem this solves
+
+What happens when a location no longer resonates? The commander needs a way to
+relocate units that introduces the least risk of losing them and **does not
+fire prematurely**.
+
+### Sheet music
+
+The commander hands out **sheet music**: what to sing, when and where to sing
+it, and when to transition to another resonator. **The environment reports
+back** whether the unit is in tune, in time, at correct pitch and key.
+
+- **Simple orders require a simple performance** — easily harmonised to
+  *many* locations.
+- **Rich orders require a rich performance** — satisfiable in *few*.
+
+Once a rich performance can no longer be audible where the unit stands, the
+unit **progresses to the next area with the most resonance for its required
+performance**.
+
+### The inversion
+
+> **Release conditions are not something a unit must complete or wait for.
+> They are the drop in richness in some part of its performance that motivates
+> it to seek a better location.**
+
+So all a commander does is: specify what areas resonate at the richness needed
+to attract the units, then **attach specific complexities onto conditions that
+will kill that richness** and thereby direct the units elsewhere.
+
+The commander's act becomes **negative specification** — not "here is a branch
+tree", but "here is what would make this place stop being right".
+
+---
+
+### Claude's readings (flagged as readings, not rulings)
+
+**1. Complexity is selectivity, not instruction count.** A rich performance is
+not a longer program; it is a *narrower filter on acceptable locations*. One
+knob sets how pinned versus how fungible a company is. Simple = mobile and
+substitutable; rich = committed and specific.
+
+**2. The soft-lock rule dissolves.** The ruled x-or-y guaranteed-exit
+requirement existed because "hold until recalled" could strand nine men
+forever. Under resonance there is no waiting state at all: the gradient always
+points somewhere. A unit that stays put stays because the location is *still
+rich* — which is correct behaviour, not a lock. Order-lock likewise stops being
+a rule and becomes physics: a unit cannot be re-tasked remotely because new
+sheet music has to be *carried* to it.
+
+**3. The release vocabulary may already be closed — at four mechanisms**, all
+of them already specified elsewhere in this document:
+
+| kills richness by | mechanism | §|
+|---|---|---|
+| time of day / schedule | band-pass gating on the clock | 6 |
+| enemy presence | phase cancellation | 4 |
+| own attrition | fall in own emitted amplitude | 7 |
+| objective lost | fundamentals fall silent | 5 |
+
+"Recalled" is not a fifth mechanism — it is **new sheet music delivered by
+messenger**, a replacement rather than a release.
+
+**4. The 10 am translation exposes one genuine gap: PARTS.** Translating the
+canonical order, most of it falls out cleanly — the 11 am branch is a clock
+filter, contact is cancellation, half-losses is amplitude, "all return" is
+simply the keep being the next-richest resonator once the gate dies. But
+*"send two men-at-arms back to clear messenger routes"* requires two men to
+carry **different sheet music from the other seven**.
+
+Which is exactly what an orchestra is: a section plays **parts**, not one
+line. So a company is not a single voice, and the score must support voices
+within a company whose richness conditions differ. **This is the first thing
+to test if the system is adopted.**
