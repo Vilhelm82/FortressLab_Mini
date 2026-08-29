@@ -954,3 +954,59 @@ need the **seed**: initial geometry, camp siting, and the sheet music issued.
 Both are worth keeping, and both are tiny. The seed is a few hundred bytes;
 the trace is sparse. Between them the game is fully reconstructible and fully
 re-explorable.
+
+---
+
+## 25. RULED: resonance is AI logic only (Will, 26 Aug)
+
+**The resonance system is the backend. Human players never see it.**
+
+A human commander's UI is designed for intuitive interaction. Each order he
+gives is **translated** into the resonance backend, which runs the AI logic
+with **not a single music-theory detail ever surfacing**.
+
+### This is a compiler architecture
+
+| layer | what it is | status |
+|---|---|---|
+| **interface** | the order grammar / the human UI — how orders are authored | LIVE, unchanged |
+| **compiler** | grammar order → chord, tuning, sheet music | TO BUILD |
+| **runtime** | the resonance field — units execute by listening | TO BUILD |
+
+The ruled grammar **does not die**; it becomes the authoring surface and the
+compilation source. `orders.py`, its validator and its 147 tests keep testing
+the front end. What changes is what happens *after* an order is issued.
+
+### Consequences
+
+**Claude's authoring objection is withdrawn.** The concern was that a human
+under PVP pressure could not compose or re-read chords, and that this collided
+with the fresh-player condition. It does not arise — nobody composes chords.
+*(Claude's §10 "score vs performance" split was the right shape but had the
+compile step implicit; it is now explicit and ruled.)*
+
+**The War College needs no adapter.** Claude's previous recommendation is
+corrected: commander decisions remain grammar orders, so the existing eleven
+scenarios test the front half unchanged. The new harness tests the field. Two
+harnesses, clean boundary, no translation of the exams.
+
+**The LLM phase is unaffected.** Models receive the move manifest — win/lose
+conditions and legal moves — exactly as ruled. They author through the same
+interface as humans and never meet the music.
+
+### The acceptance bar, sharpened
+
+It is no longer *"can a human express this in chords"*. It is:
+
+> **Is the compilation total and faithful?** Does every legal grammar order
+> compile to a performance, and does executing that performance produce the
+> behaviour the order specifies?
+
+The 10 am order remains the canonical fixture, now testing the compiler rather
+than the human.
+
+**And compilation failures may be a feature.** Will has ruled the finite
+vocabulary *desirable*. An order that cannot be sung is arguably an order the
+game should not permit — so the compiler doubles as a **legality filter**, and
+each failure is a decision: trim the grammar, or extend the resonance
+vocabulary.
