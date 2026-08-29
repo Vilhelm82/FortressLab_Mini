@@ -1143,3 +1143,84 @@ colouring proposal, its beating argument and its sonified-war-room note are
 Pattern: proposing an idea, then treating it in later sections as though it
 were ruled. **Every Claude suggestion in this document is flagged as such; if
 it is not flagged, Will ruled it.**
+
+---
+
+## 28. The octave stack, the choir, and the inversion cascade (Will, 26 Aug)
+
+**Companies must follow their company leader.** Only sergeants and knights
+sing the leader octave, directing their company like a choir. Units are drawn
+to the leader exactly as they would be to a resonating location.
+
+**On arrival, units break to close in on the location root plus the dyad.**
+Lower octave = stronger influence, so once the location's deeper frequency is
+close enough to drown the leader out, the company **folds out naturally** and
+the dyad wins, because their orders resonate cleaner there.
+
+### The octave stack (base pitch is arbitrary — one just has to be picked)
+
+| band | role | strength |
+|---|---|---|
+| lowest | **location root** — the region | strongest, travels furthest |
+| next up | **company leader** — sergeant / knight | mid |
+| next up | **dyad specifier** — sub-location | short range, stone-blocked |
+| above | **extensions** — conditions, tactics | shortest |
+
+Depth *is* authority. The handoff from leader to post needs no rule: the
+location simply becomes louder than the sergeant.
+
+### Inversion cascade on leader death
+
+The company continues to the location, following the root. With no leader
+maintaining the signal, the unit's range narrows under a rising filter. **Each
+time the filter cuts the current root, the remaining order shifts up into the
+root slot** — the unit latches to the dyad as its new root, then to an
+extension, and so on. With only a root left it seeks the strongest signal
+matching it.
+
+Since upper extensions exist at any location, **the unique root+dyad pair is
+the dissonance barrier** a unit must cross to join another company. So a
+degraded man drifts toward *matching roles*, not random ones.
+
+### Two corrections (Claude, measured)
+
+**1. The filter must sweep from the BOTTOM, not from the leader octave.**
+As first specified — start 65.41 Hz — the cutoff is already above the entire
+location octave, so the root the unit is meant to follow is gone at tick 0 and
+no cascade can occur. Starting at the bottom of the location octave and rising
+produces exactly the described shift-into-the-root-slot behaviour.
+
+**2. Linear 100 Hz/tick is far too fast; use a geometric sweep.**
+Linear rates cross low octaves fastest — the location octave is only ~33 Hz
+wide and vanishes in a third of a tick. Geometric (≈ ×1.06/tick) is constant
+in octaves: root gone ≈ t=12, leader band ≈ t=24, specifier ≈ t=36. A lost man
+degrades over about a minute instead of two ticks. Rate goes in
+`config_balance`.
+
+## 29. RESOLVED: attracting units to under-strength companies
+
+**Will's question:** how do units prefer companies with empty slots over full
+ones, without leaving the resonance system?
+
+**Answer: don't count slots — let the gap be audible.**
+
+A company is a choir with parts. A **full** company sings a complete chord:
+nothing wanting, nothing a newcomer can add. An **under-strength** company has
+missing voices, so its chord is **incomplete — an unresolved harmony**. A
+stray unit seeking maximum harmonisation hears one chord it cannot improve and
+another that its own note would **resolve**, and goes to the second.
+
+**Attraction is by harmonic complementarity, not amplitude** — and it has to
+be, because amplitude runs the wrong way: a full company is louder and would
+pull harder. A missing third is *tension*, and tension is what resolution
+seeks.
+
+This keeps two quantities cleanly separate:
+
+| quantity | scales with | ruled in |
+|---|---|---|
+| **dominance** — holding the auditorium | numbers present | §13 |
+| **attraction** — pulling a stray in | harmonic need | §29 |
+
+A big company holds ground better; a hollow one calls louder to the man who
+can complete it. No slot-counting, no capacity rule, no assignment.
