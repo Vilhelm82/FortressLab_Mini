@@ -853,3 +853,58 @@ out.)
 noise also means units. A sneaking company wants to be near enough to the
 racket to be buried by it and far enough from the men making it to avoid
 contact — a real trade with a non-trivial best answer, requiring no rule.
+
+---
+
+## 23. Seeing vs being seen; least detection as universal routing (Will, 26 Aug)
+
+**Correction to §22's table.** It conflated two different things:
+
+- **Being looked at** — the beam striking you — is the *weakest* detection
+  channel, and silent at 180°.
+- **Looking** — visual perception — is the **strongest**, because it is a beam.
+
+These are asymmetric on purpose. **A stealth unit can be spotted clearly while
+barely registering that anyone is watching.** Its danger is not being heard; it
+is being *seen*, and not knowing it. Hence: stay close enough to the noise to
+mask the sound, while avoiding being spotted — which, done well, leaves only
+bad luck.
+
+| channel | strength | notes |
+|---|---|---|
+| looking (own beam) | **strongest** | direct line of sight; the seer sees clearly |
+| destructive interference | strong | focus, degrades performance and navigation |
+| hearing | scales with proximity | reaches at any range if nothing competes |
+| being looked at | weakest | silent at 180° — you may not know you are seen |
+
+### Least detection as the universal routing preference
+
+**RULED: the path of least detection is the preferable choice of ALL units** —
+not a stealth special case.
+
+**So a stealth kill becomes deterministic from the environment rather than a
+coded behaviour.** Nobody writes sneaking. If a covered approach to the war
+room exists, someone will find it, every time.
+
+### Consequences
+
+**This closes OBSCOST** — the gap Claude flagged on the escalation ladder that
+no row ever answered: *being observed cost the attacker nothing; only being
+shot at was priced.* Detection now enters every unit's routing directly.
+`config_balance.COST_FIELD.lambda_obs` already carries a provisional default.
+
+**Watchman placement shapes attack routes by gradient, not by rule.** Where
+the defender can see determines where the attacker will not go. Posting is
+route design.
+
+**Game A gets a hard design consequence.** Whether your castle admits a covered
+approach to the war room is now a *deterministic* property of what you built —
+not a chance the AI might spot it. The observability concern ruled on 25 Aug
+gets its teeth here.
+
+### Reading (Claude's, unruled)
+
+Maximum harmonisation and least detection could pull against each other. The
+natural resolution: **harmonisation sets the destination, least detection
+selects the route.** Where to be is the score; how to get there is the
+gradient.
