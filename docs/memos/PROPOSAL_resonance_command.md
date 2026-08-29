@@ -1224,3 +1224,36 @@ This keeps two quantities cleanly separate:
 
 A big company holds ground better; a hollow one calls louder to the man who
 can complete it. No slot-counting, no capacity rule, no assignment.
+
+---
+
+## 30. RESOLVED: messengers (Will, 26 Aug)
+
+Clarification: **the game still has ticks.** Only the *clock* — time-of-day as
+an orderable condition — was scrapped (§14).
+
+**Messengers run on exactly the same logic as any other unit.** They are given
+orders that are a set of notes, and **each completed order removes a note.**
+
+The one difference: a messenger **replaces its root each time it reaches a
+checkpoint**. A route is a list of dyad locations. The first is reached the
+same way a sergeant reaches anything; **arrival is the release**, which hands
+down the next dyad as the new root, and the messenger path-finds to that.
+
+**This closes §14's only open hole with no new mechanism.** The rolling
+band-pass filter is not needed and stays withdrawn.
+
+### The root slot is a cursor — one operation, two triggers
+
+| trigger | effect |
+|---|---|
+| **arrival at a checkpoint** (progress) | current root removed, next note shifts into the root slot |
+| **filter cutting from below** (degradation, §28) | current root removed, next note shifts into the root slot |
+
+The inversion cascade and route progression are **the same operation**. A
+messenger walking his circuit and a leaderless man losing his orders are
+running identical machinery in opposite spirits — one advancing through a
+plan, the other decaying out of one.
+
+A route is therefore just an ordered stack of roots, and a messenger always
+has exactly one root: his next stop.
