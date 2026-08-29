@@ -382,3 +382,41 @@ Which is exactly what an orchestra is: a section plays **parts**, not one
 line. So a company is not a single voice, and the score must support voices
 within a company whose richness conditions differ. **This is the first thing
 to test if the system is adopted.**
+
+---
+
+## 14. CLOCK SCRAPPED (Will, 26 Aug)
+
+**Ruled out of the proposal.** Orders bound to what time it is are neither
+more convenient nor more practical than orders bound to environmental
+conditions. §6's band-pass-on-the-clock and the rolling route filter are
+**withdrawn**, and the §13 release table drops from four mechanisms to three:
+
+| kills richness by | mechanism |
+|---|---|
+| enemy presence | phase cancellation |
+| own attrition | fall in own emitted amplitude |
+| objective lost | fundamentals fall silent |
+
+All three are *things that happen in the world*. Nothing consults a clock.
+
+### Consequences
+
+**The canonical 10 am order is no longer canonical.** It was the fixture that
+introduced diegetic clock predicates; under this proposal its 10 am and 11 am
+branches are simply not expressible, and its content re-states as: hold while
+the gate resonates, leave when contact or attrition kills the richness. The
+§13 translation test survives — but the thing it now tests is whether the
+*environmental* half was ever doing all the work.
+
+**Messenger routes need a new motive force.** §6 had a rolling band-pass
+pushing the messenger along in lockstep with a schedule. With no clock, what
+draws a messenger along a route is unresolved — **the one genuine hole this
+ruling opens.** Candidate (Claude's, unruled): a messenger's performance is
+satisfied only by *fresh* resonance, so a location he has already sung at is
+spent for him and the richest remaining point is always the next stop —
+staleness as the gradient, with no clock anywhere.
+
+**A "schedule" becomes an emergent rhythm rather than a timetable.** Circuit
+period stops being set and starts being *measured* — a consequence of route
+length and unit speed. Which is what it physically is.
