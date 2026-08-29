@@ -1429,10 +1429,14 @@ these come after the map and resonance mechanics settle.
 
 - **what a commander is allowed to write, and what authors it.** Everything
   else in the command layer waits behind this.
-- **how the map divides into its 12 regions and 6 posts each.** Auto-assigned
-  by the game (ruled); the division itself is undesigned.
 
-Settled since this document was written: parts are addressed by **type and
+Settled since this document was written: **the human designing the map assigns
+the regions** — it is a design act, not something the game computes. And there
+are **up to 12, not 12 as a minimum**: a small castle may want four, and the
+address space simply goes unused. What the game auto-assigns is which
+*fundamental* each region receives, so that both sides read the same
+addresses and no commander can disagree about what a place sounds like.
+Likewise parts are addressed by **type and
 count**, never by identity (§31) — so a part is a filter over the roster and
 heals itself when a man falls. And the guaranteed-exit requirement was a rule
 of the deleted grammar; under a gradient a unit always has somewhere to go, so

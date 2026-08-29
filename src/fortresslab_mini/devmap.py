@@ -26,7 +26,9 @@ Geometry, west to east:
     corners  towers, 3 high. Curtain elsewhere 2 high.
     x 26     on y2: the POSTERN.
 
-Twelve regions are named for addressing (12 fundamentals, <=6 posts each).
+Twelve regions are named here, which is the maximum. A castle may use
+fewer — the address space simply goes unused. The designer assigns them;
+the game assigns which fundamental each receives.
 """
 
 W, H = 36, 22
