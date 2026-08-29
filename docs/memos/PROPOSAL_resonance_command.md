@@ -694,3 +694,60 @@ The chain maintains signal amplitude from the commander's source. If he goes
 quiet to avoid being hunted, does his whole army go quiet with him — trading
 army-wide dominance for personal concealment? That would be an elegant
 tradeoff, but it is inference, not a ruling.
+
+---
+
+## 20. Signal topology — cable, speaker, cabinet (Will, 26 Aug)
+
+A commander gating his own dB attenuates **only his location's resonance
+strength**, never the chain's amplitude.
+
+**The chain of command is an instrument cable.** It carries the signal but
+cannot produce sound without a speaker.
+
+- **Commander** = the source
+- **Chain of command** = the cable — carries, radiates nothing
+- **Units** = the speakers — the only things that produce sound
+- **Locations** = where that signal resonates strongest — the cabinet
+
+**The wrong location is the wrong tuning**: a poorly designed speaker cabinet
+that muffles or hollows out the signal's full range.
+
+### Re-tasking is not remote control
+
+The commander can tune his own location to match a new set of orders — for
+example *all archers fall back*. But **that order still has to be delivered by
+messenger as new sheet music**, and only then are those units attracted back
+to him.
+
+So the location's tuning and the unit's sheet music must **match** for
+attraction to occur. Changing one without the other does nothing.
+
+### Consequences
+
+**The ruled order-lock is preserved as physics.** A commander cannot yank
+companies around by retuning the field — a unit sings from its own sheet, and
+new sheet music has to be carried to it. Re-tasking remains a physical act
+performed by a man who can be killed.
+
+**The chain is silent, therefore undetectable.** Command itself makes no
+sound; only its effects do. An enemy can hear where units are and what they
+are, never that an order has just been issued or what it said. Interception
+stays physical — kill the runner, stand on the logbook.
+
+**Class addressing is confirmed.** *"All archers fall back"* is an order
+addressed to a class, matching §16's per-company chords one level up: a tuning
+can be written to attract a unit type rather than a specific company.
+
+### OPEN QUESTION (not assumed)
+
+**How does a unit navigate to an empty location?** If cabinets do not produce
+sound and only speakers do, a correctly tuned but *unoccupied* post is silent —
+and there is no gradient to walk up.
+
+Candidate (Claude's, unruled, and acoustically true): a cabinet colours
+whatever ambient sound reaches it, so the army's own general signal excites
+every location and each returns its own resonant signature. A unit then hears
+which cabinet would suit its part before anyone is standing in it. If that is
+wrong, some other mechanism is needed — because without one, units can only
+ever navigate toward posts that are already manned.
