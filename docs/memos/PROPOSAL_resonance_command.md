@@ -1139,6 +1139,8 @@ colouring proposal, its beating argument and its sonified-war-room note are
 4. Recommended a War College adapter, assuming resonance replaced authoring.
 5. Recommended avoiding consonance (§26) — retracted here.
 6. Kept restating the sonified war room after §25 ruled it out.
+7. Claimed in §31 that the 10 am order "compiles in full" — after writing the
+   §14 ruling that scrapped the clock and killed that fixture.
 
 Pattern: proposing an idea, then treating it in later sections as though it
 were ruled. **Every Claude suggestion in this document is flagged as such; if
@@ -1277,11 +1279,22 @@ So a company's score is **not one chord but a set of chords sharing a root.**
 
 ### What this resolves
 
-**The 10 am order now compiles in full.** *"Send two men-at-arms back to clear
-messenger routes"* is a part: those men carry their own extensions above the
-shared root, and the clause that releases them silences only their notes. This
-was the last clause of the canonical fixture with no translation — the §25
-acceptance bar looks passable.
+**The detachment clause is now expressible.** *"Send two men-at-arms back to
+clear messenger routes"* is a part: those men carry their own extensions above
+the shared root, and the condition that releases them silences only their
+notes.
+
+**CORRECTION (26 Aug):** this section originally claimed "the 10 am order now
+compiles in full". It does not, and cannot — **§14 scrapped the clock**, so
+that fixture's 10 am and 11 am branches are not expressible by design. Only
+its environmental half compiles (gate as root+dyad, half-losses as amplitude
+drop, contact as cancellation, the detachment as a part). Claude wrote the §14
+ruling and then contradicted it here; the error is logged in §27.
+
+**The acceptance bar therefore needs a NEW canonical fixture** — an order
+written in environmental terms only, exercising location, sub-location, parts,
+and all three release mechanisms. It must be authored by Will, as the 10 am
+order was.
 
 **Detachment is expressible without breaking the hierarchy.** The sergeant
 still only modulates and attenuates (§21) and changes nothing: the multi-line
