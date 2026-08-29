@@ -420,3 +420,35 @@ staleness as the gradient, with no clock anywhere.
 **A "schedule" becomes an emergent rhythm rather than a timetable.** Circuit
 period stops being set and starts being *measured* — a consequence of route
 length and unit speed. Which is what it physically is.
+
+---
+
+## 15. The thesis (Will, 26 Aug)
+
+> **Orders are performances, not prose. Then the units become like water
+> filling a container.**
+
+This is the plumbing philosophy applied to the command layer itself. Prose is
+read and executed — it tells the water how to be water. A performance is
+*sustained*, not followed: it is a state a unit is in, and the container is
+the only thing that decides where it settles.
+
+**What this kills:** the assignment problem. `commander.py` v0 currently
+matches nearest-free-company to threat, one at a time. Under this thesis the
+commander assigns nobody — he tunes locations, and distribution happens.
+
+**The tension to resolve (Claude's flag, unruled).** Water levels out because
+containers have *capacity*. As specified, §13 says more units at a location
+means more dominant propagation — positive feedback, which clumps every unit
+onto the single richest point. That is iron filings to a magnet, not water
+finding level.
+
+For water behaviour, richness must **saturate** with occupancy. The
+orchestral answer is natural and already in the metaphor: **a part has a voice
+count.** You do not need twenty cellists on one line. Once a part is fully
+voiced, a further unit adds nothing to its own harmonisation and the next-best
+resonator wins — and units distribute exactly as water does, filling low
+places first.
+
+**Unresolved:** whether saturation is per part (voice counts) or some other
+mechanism.
