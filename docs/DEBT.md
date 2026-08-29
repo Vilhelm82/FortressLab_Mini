@@ -26,20 +26,17 @@ does not care about elevation and the beam does not use eye height.
 `Grid(w, h, stone=(), timber=())` takes explicit cell sets. The map's own
 block types are ignored.
 
-**D4. `tools/warroom.py` is broken.**
-Imports the deleted `enemy_brain`. Its planner verdict has no replacement.
-
-**D5. `config_balance.py` carries eight sections for systems that do not
+**D4. `config_balance.py` carries eight sections for systems that do not
 exist.** AMMO, ENGINES, DAMAGE, FIRE, PRODUCTION, SALLY, UNDERGROUND, TENT —
 provisional numbers for ruled-but-unbuilt features. PERCEPTION_EXTRA and
 COST_FIELD are superseded by RESONANCE. Keep or cut is a call, not a defect.
 
-**D6. Every RESONANCE constant is unvalidated.**
+**D5. Every RESONANCE constant is unvalidated.**
 Layer weights, decay rates, transmission coefficients, the angular hearing
 curve, the masking threshold, the cascade sweep rate. Claude picked all of
 them to express orderings Will ruled. The tests pin structure, never values.
 
-**D7. The nine conformance tests are static-field only.**
+**D6. The nine conformance tests are static-field only.**
 No motion over time except the two that step manually. Nothing tests
 interference degrading navigation, the pulse, or two sides at once.
 
@@ -47,11 +44,11 @@ interference degrading navigation, the pulse, or two sides at once.
 
 ## Rulings that exist and are unimplemented
 
-**D8. SPAWNTIME / camp distance.** A float default sits in
+**D7. SPAWNTIME / camp distance.** A float default sits in
 `config_balance`; the ruled camp-distance requirement is defined in terms of
 it and has never been computed.
 
-**D9. SELFORD.** Self-ordered (commanders, detached officers: restrained) vs
+**D8. SELFORD.** Self-ordered (commanders, detached officers: restrained) vs
 self-directed (remnants: unrestrained). Ruled as a distinction on 25 Aug,
 never specified.
 
