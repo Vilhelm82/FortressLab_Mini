@@ -45,27 +45,42 @@ sources**.
 
 ## 2. Locations, tuning, and navigation
 
-*(The earliest statement of this. Superseded in detail but not in substance:
-addressing was settled in §16 as a region root plus a diatonic dyad whose
-specifier sits above the stone cutoff, and "maximum harmonisation" was
-resolved in §35 into two bands doing two jobs. The mention of "duration"
-below predates §14, which scrapped the clock.)*
+Each location carries a **bass tone** — its region. Twelve of them, one per
+addressable region, all inside a single octave so no harmonic of any lands on
+another. Lower frequencies travel further, so the region is audible from
+anywhere on the map, and it passes through stone.
 
-Each location corresponds to a **bass tone**. Lower frequencies emit longer
-sine waves that travel further, so a unit can orient itself by moving toward
-**increasing resonant harmonic quality**.
+A specific post within that region is named by a **dyad**: the region's root
+plus one diatonic degree, voiced above the stone cutoff. Being above the
+cutoff, the specifier crosses no stone at all. It leaves a place only by ways
+that are actually open — a door, a corridor, over a parapet — and travels the
+route that delivers the most energy rather than the shortest line.
 
-When a commander issues an order requiring a unit to be posted at a specific
-location, that location becomes **tuned to resonate and harmonise to that
-order**. As a unit approaches, the **higher register frequencies progressively
-improve the overall resonance** — which is how order priorities and release
-conditions scoped to location and duration are distinguished from one another.
+**That difference is what makes navigation work.** The two bands do two jobs:
+
+| band | crosses stone | what a unit gets from it |
+|---|---|---|
+| **root** | yes | a **bearing**: which region, from anywhere, constant |
+| **dyad specifier** | no | a **route**: it arrives only along open ways, so its gradient points back the way it came |
+
+A unit steps to the neighbour where the specifier is loudest; where two answer
+equally, it takes the one where the root is louder. No map, no pathfinding —
+it compares what it can hear from where it stands. **Every location a unit
+must path-find to has to be a dyad**; a bare root names an area and stops
+there.
+
+As a unit approaches, the higher registers progressively resolve. Far off it
+knows only the region; on approach the post; closer still the order's own
+extensions. Coarse to fine, out of one cutoff frequency rather than a
+wayfinding layer.
 
 **Locations always resonate the harmonic fundamentals. Release conditions
-gate on the extensions.**
+gate on the extensions**, which sit higher, are less easily cancelled, and so
+survive under pressure — an order degrades toward its own exit.
 
-The more complex the order, the more complex the order signal. **All units
-seek the direction of maximum harmonisation.**
+The more complex the order, the more complex its signal, and the fewer places
+satisfy it. Complexity is selectivity: a simple performance harmonises with
+many locations, a rich one with few.
 
 ### Worked example (Will's)
 
@@ -73,9 +88,11 @@ The Home Commander directs a company to station around the main gate and
 remain until either the gate is breached or they lose more than half their
 men.
 
-The order is issued; the gate location becomes fine-tuned to resonate those
-orders. The gate area emits the **root, major 3rd and major 5th**; the
-**release conditions emit the extensions**.
+The order is issued; the gate location is tuned to it. The gate area emits the
+root and its dyad; the **release conditions emit the extensions** — the fifth
+carrying whether the gate still stands, the seventh whether the archers still
+have arrows. When the gate falls the fifth goes quiet, and that silence is
+both the news and the release.
 
 ## 3. Emission, resonance, and the chain
 
