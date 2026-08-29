@@ -1368,11 +1368,7 @@ actually arrived, which is the way in.
 there. What was a local maximum trapping a unit against the stone is now a
 local minimum pushing him sideways toward the opening.
 
-**Navigation needs no map.** With the two bands — specifier as the primary
-vector, root breaking ties — **every one of the 291 open cells inside the
-development castle reaches the war room by pure local sampling.** No
-pathfinding, no knowledge of the layout. Cells outside fail correctly: the
-castle is sealed, and neither sound nor men get in through a shut gate.
+**Navigation needs no map** — see §35 for the rule and its present limit.
 
 ## 33. The third dimension (29 Aug)
 
@@ -1441,3 +1437,49 @@ count**, never by identity (§31) — so a part is a filter over the roster and
 heals itself when a man falls. And the guaranteed-exit requirement was a rule
 of the deleted grammar; under a gradient a unit always has somewhere to go, so
 it is not carried forward.
+
+
+---
+
+## 35. RULED: navigation by two bands (Will, 28 Aug)
+
+**The dyad note travels the map and gives the unit a second vector to follow,
+which reveals how to navigate through the stone. The root keeps the direction
+constant, so where there is a genuine fork and a unit hears an exact 50/50 on
+the dyad, the root still weighs in on which path it takes.**
+
+Two bands, two different jobs:
+
+| band | crosses stone | what it gives |
+|---|---|---|
+| **root** (region fundamental) | yes | a **bearing** — which region, from anywhere, constant |
+| **dyad specifier** (sub-location) | no | a **route** — it reaches a unit only along ways that are open, so its gradient points back the way it came |
+
+The rule: **step to the neighbour where the specifier is loudest; where two
+answer equally, take the one where the root is louder.** Nothing else. No
+map, no pathfinding, no knowledge of the layout — a unit compares its own
+neighbours and moves.
+
+**Every location a unit must path-find to has to be a dyad.** A bare root is
+an area, not a destination: it says which region, and stops.
+
+### Proven, and its present limit
+
+In the flat build this carried a unit from **every one of the 291 open cells
+inside the development castle** to the war room, through the keep's single
+door, by local sampling alone. A test forbade the pathfinder entirely and it
+still arrived.
+
+**In 3D it does not yet hold everywhere.** Sound now goes *over* walls as
+well as round them. The keep stands 4 high, so the specifier climbs its wall,
+crosses the roof and comes down the far side — reaching every cell north of
+the keep at the *same* strength. A flat plateau with no gradient in it.
+
+The door plume to the south is unaffected and works exactly as before. But a
+unit standing in the plateau has no slope to follow, and the root only peaks
+against the wall.
+
+**OPEN, and Will's to rule:** what a unit does when it hears a location
+clearly but has no local slope toward it. Recorded as an ignored test
+(`a_unit_finds_its_way_from_anywhere_inside_the_castle`) rather than answered
+by invention.
