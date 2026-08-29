@@ -12,7 +12,6 @@ complementarity.
 Deterministic. No RNG. All constants in config_balance.RESONANCE.
 """
 
-from collections import deque
 from math import atan2, cos, pi
 
 from fortresslab_mini.config_balance import RESONANCE as R
@@ -56,29 +55,44 @@ class Grid:
     def open(self, c):
         return c not in self.stone and c not in self.timber
 
-    def sound_dist(self, src):
-        """Per-cell (steps, walls_crossed) for sound: it may pass through
-        material, paying a transmission penalty per wall cell entered.
-        Dijkstra-lite over uniform steps; walls tracked separately so each
-        band applies its own transmission factor."""
-        best = {src: (0, ())}
-        q = deque([src])
-        while q:
-            c = q.popleft()
-            d, walls = best[c]
+    def band_field(self, src, layer):
+        """Amplitude multiplier per cell for ONE band, by the loudest path.
+
+        Sound does not take the shortest route; it takes the route that
+        delivers the most energy. A long way round through open air beats a
+        short way through stone whenever the material eats more than the
+        extra distance does. Dijkstra in -log(amplitude) space, per band,
+        because decay and transmission both differ by band: the bass goes
+        through walls, the specifier only round them.
+        """
+        import heapq
+        from math import log, exp
+        step = -log(R["decay"][layer])
+        tx = {"stone": R["stone_tx"][layer], "timber": R["timber_tx"][layer]}
+        wall = {}
+        for m, v in tx.items():
+            wall[m] = float("inf") if v <= 0.0 else -log(v)
+
+        cost = {src: 0.0}
+        pq = [(0.0, src)]
+        while pq:
+            c, cell = heapq.heappop(pq)
+            if c > cost.get(cell, float("inf")):
+                continue
             for dx, dy in DIRS8:
-                n = (c[0]+dx, c[1]+dy)
+                n = (cell[0] + dx, cell[1] + dy)
                 if not (0 <= n[0] < self.w and 0 <= n[1] < self.h):
                     continue
                 mat = ("stone" if n in self.stone else
                        "timber" if n in self.timber else None)
-                nw = walls + ((mat,),) if mat else walls
-                cand = (d + 1, nw)
-                if n not in best or cand[0] < best[n][0] \
-                        or (cand[0] == best[n][0] and len(nw) < len(best[n][1])):
-                    best[n] = cand
-                    q.append(n)
-        return best
+                w = wall[mat] if mat else 0.0
+                if w == float("inf"):
+                    continue
+                nc = c + step + w
+                if nc < cost.get(n, float("inf")):
+                    cost[n] = nc
+                    heapq.heappush(pq, (nc, n))
+        return {k: exp(-v) for k, v in cost.items()}
 
     def los(self, a, b):
         """Bresenham; blocked by any material cell."""
@@ -118,21 +132,18 @@ class Field:
         self.emitters = list(emitters)
         self._dists = {}
 
-    def _dist(self, src):
-        if src not in self._dists:
-            self._dists[src] = self.grid.sound_dist(src)
-        return self._dists[src]
+    def _dist(self, src, layer):
+        key = (src, layer)
+        if key not in self._dists:
+            self._dists[key] = self.grid.band_field(src, layer)
+        return self._dists[key]
 
     def _amp(self, e, note, at):
         layer, _ = note
-        entry = self._dist(e.pos).get(at)
-        if entry is None:
+        m = self._dist(e.pos, layer).get(at)
+        if m is None:
             return 0.0
-        d, walls = entry
-        a = e.db * e.numbers * R["layer_weight"][layer] * (R["decay"][layer] ** d)
-        for (mat,) in walls:
-            a *= R["stone_tx" if mat == "stone" else "timber_tx"][layer]
-        return a
+        return e.db * e.numbers * R["layer_weight"][layer] * m
 
     def hear(self, at):
         """Signed spectrum at a cell: {(layer,freq): amplitude}."""
@@ -207,19 +218,16 @@ class Field:
         Returns {location: (return_strength, resolved_layers)}."""
         out = {}
         for loc in locations:
-            entry = self._dist(unit.pos).get(loc.pos)
-            if entry is None:
-                out[loc] = (0.0, set()); continue
-            d, walls = entry
-            match = len(set(unit.notes) & set(loc.notes))
-            if match == 0:
+            shared = set(unit.notes) & set(loc.notes)
+            if not shared:
                 out[loc] = (0.0, set()); continue
             strength, layers = 0.0, set()
-            for note in set(unit.notes) & set(loc.notes):
+            for note in shared:
                 layer = note[0]
-                a = unit.db * R["layer_weight"][layer] * (R["decay"][layer] ** (2*d))
-                for (mat,) in walls:
-                    a *= R["stone_tx" if mat == "stone" else "timber_tx"][layer] ** 2
+                m = self._dist(unit.pos, layer).get(loc.pos)
+                if m is None:
+                    continue
+                a = unit.db * R["layer_weight"][layer] * (m ** 2)   # round trip
                 if a > R["echo_floor"]:
                     strength += a; layers.add(layer)
             out[loc] = (strength, layers)
