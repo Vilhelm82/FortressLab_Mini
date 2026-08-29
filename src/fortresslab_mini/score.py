@@ -10,14 +10,11 @@ A note is an extension carrying one condition-set. Notes die when their
 conditions hold; a dying note is a drop in richness, which motivates
 relocation. That is the whole release mechanism.
 
-THE THREE RULED MECHANISMS, plus their own-state family:
+THE THREE RULED MECHANISMS:
 
     SILENCE      objective lost — the location's fundamentals stop
     CANCELLATION opposed signal present — enemy interference
     ATTRITION    own amplitude falls — losses against initial strength
-    SPENT        an own resource reaches zero (ammo; the gate example's 7th)
-    CLEAR        opposed signal absent
-    HAZARD       an environmental kind in a region
 
 Locality is structural, not checked: every condition above is something the
 unit hears or knows of itself. GUARDLOC cannot recur here — there is no
@@ -28,11 +25,16 @@ MAX_LAYERS = 6          # the scale caps order complexity (6 non-root degrees)
 MAX_REGIONS = 12
 MAX_POSTS = 6
 
-CONDITION_KINDS = {"silence", "cancellation", "attrition", "spent",
-                   "clear", "hazard"}
-SELF_RESOLVING = {"attrition", "spent"}     # will fall without an arrival
-HAZARDS = {"fire", "water", "smoke"}
+CONDITION_KINDS = {"silence", "cancellation", "attrition"}
 CLASSES = {"enemy", "friend", "civilian"}
+
+# GAPS — not yet ruled, deliberately absent rather than placeheld:
+#   - what ends a strike (interference removed)
+#   - how fire/hazards enter a score
+#   - whether own-state conditions (ammo etc.) exist at all, and whether
+#     they belong beside three conditions that are all field-audible
+#   - whether a score needs a guaranteed exit (the old x-or-y rule was
+#     written for the grammar and may be moot under a gradient)
 
 
 def silence():
@@ -47,25 +49,9 @@ def cancellation(cls="enemy", n=1):
     return ("cancellation", cls, n)
 
 
-def clear(cls="enemy"):
-    """Opposed signal absent."""
-    return ("clear", cls)
-
-
 def attrition(num=1, den=2):
     """Own amplitude down to num/den of initial strength."""
     return ("attrition", num, den)
-
-
-def spent(attr="ammo"):
-    """An own resource reaches zero."""
-    return ("spent", attr)
-
-
-def hazard(kind, region="here"):
-    if kind not in HAZARDS:
-        raise ValueError("unknown hazard %r" % (kind,))
-    return ("hazard", kind, region)
 
 
 def note(*conditions, **kw):
@@ -113,11 +99,6 @@ def validate_score(sc):
                 "part %r needs %d notes; the scale caps complexity at %d "
                 "layers above the root" % (p["filter"], len(p["notes"]),
                                            MAX_LAYERS))
-        if not any(any(c[0] in SELF_RESOLVING for c in n["conditions"])
-                   for n in p["notes"]):
-            problems.append(
-                "part %r has no self-resolving note: every release waits on "
-                "something that may never arrive" % (p["filter"],))
         if p["kinds"] and not set(p["kinds"]) <= set(sc["kinds"]):
             problems.append("part %r exceeds the granted kinds (scope "
                             "attenuates, never amplifies)" % (p["filter"],))
@@ -162,15 +143,9 @@ class ScoreExec:
         if k == "cancellation":
             return max(w["count"].get((c[1], "here"), 0),
                        w["count"].get((c[1], "visible"), 0)) >= c[2]
-        if k == "clear":
-            return w["count"].get((c[1], "here"), 0) == 0
         if k == "attrition":
             s = w["self"]
             return s["losses"] * c[2] >= c[1] * s["initial"]
-        if k == "spent":
-            return w["self"].get(c[1], 0) <= 0
-        if k == "hazard":
-            return w["hazard"].get((c[1], c[2]), 0) >= 1
         raise ValueError(c)
 
     def step(self, world):
