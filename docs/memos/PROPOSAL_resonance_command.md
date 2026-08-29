@@ -201,8 +201,8 @@ as a layer:
   and tested.
 - **Resonance = the performance.** Sub-order execution: formations, spacing,
   cohesion, persistence when cut off, the fold-in of self-directed units.
-- **Sonified war room.** Major versus minor as the two sides' identity; a
-  castle you can *hear* going dissonant sector by sector.
+- ~~Sonified war room~~ — **STRUCK 26 Aug.** Claude's suggestion; killed by
+  §25 (resonance is AI logic only, no music-theory detail ever surfaces).
 
 ## 11. If adopted, first things to build
 
@@ -1055,13 +1055,12 @@ Wide separation fixes this too: a tritone apart (65.41 vs 92.50 Hz) beats at
 ~27 Hz, far outside anything that could be confused with a closing enemy.
 **Second independent argument for the same rule.**
 
-### Where the human ear DOES matter
+### Where the human ear matters: NOWHERE
 
-The **sonified war room**. If the audio UI is ever built, a player listening
-to his castle wants something legible, not a wall of tritones. But §25 already
-ruled the music never surfaces — the UI is a translation layer, so the backend
-can address in tritones while the interface voices it however sounds right.
-Two requirements, cleanly separable.
+*(This section originally argued the human ear mattered in a "sonified war
+room". **STRUCK 26 Aug** — that was Claude's own idea, killed by §25. The
+resonance system is AI logic only and never surfaces. There is no audio UI.
+Human-ear consonance is irrelevant to this system at every layer.)*
 
 ### Non-issue, checked
 
@@ -1129,6 +1128,18 @@ everything at once, which no unit is.
 
 **Standing after this retraction:** §26's confirmation of the dyad specifier
 above the stone cutoff stands. Its dissonance recommendation, its graph-
-colouring proposal and its beating argument are all withdrawn. The sonified
-war-room note survives — that layer is for human ears and can be voiced
-separately.
+colouring proposal, its beating argument and its sonified-war-room note are
+**all withdrawn**. The last of those was Claude's own idea, already killed by
+§25; restating it was an error.
+
+### Claude error log (this proposal)
+1. Imported damage into interference — units have no HP.
+2. Built a bloodlust-handoff story on top of that import.
+3. Audited the water metaphor literally.
+4. Recommended a War College adapter, assuming resonance replaced authoring.
+5. Recommended avoiding consonance (§26) — retracted here.
+6. Kept restating the sonified war room after §25 ruled it out.
+
+Pattern: proposing an idea, then treating it in later sections as though it
+were ruled. **Every Claude suggestion in this document is flagged as such; if
+it is not flagged, Will ruled it.**
