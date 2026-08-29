@@ -95,18 +95,45 @@ travelling every open route there is — out of a door, along a corridor, over a
 parapet. Its gradient at any cell points back along the way it actually
 arrived, which is the way in.
 
+### The low-pass cap
+
+Absorption is capped by a low-pass filter, and **the cutoff is set per
+material**. Units hear the low frequencies of where they need to go *through*
+geometry; everything higher is absorbed by it. Stone absorbs more than timber,
+so an enemy is invisible behind stone and detectable behind timber.
+
 **One mechanic covers sight and hearing.** There is no separate visibility
-system: material transmission is the low-pass, and the low-pass is everything.
+system: material transmission is the low-pass, distance is the same low-pass
+again, and between them they are everything.
+
+Transmission is frequency-dependent rather than all-or-nothing, which is what
+makes the addressing of §2 work at all: bass penetrates geometry so a unit
+always knows roughly where it must go, while detail does not, so it learns
+nothing of what stands between. Precisely the property a fog game wants.
+
+### Reading the enemy from the wave
+
+**The magnitude of destructive interference implies the strength and
+composition of what is producing it.** Every unit of a kind emits the same
+interval, so a watchman drawn to the direction of interference can report what
+units and how many, purely from the wave.
+
+Intelligence reports are therefore **spectra**: what a unit heard — intervals,
+amplitudes, directions. A messenger's logbook is a set of recordings, and the
+commander's map a spectral mosaic.
 
 ### Consequences
 
 - **Material is a perception design decision.** Timber is cheaper and faster
   but leaks the detail of what stands behind it; stone is opaque but costly.
+  The player is choosing how transparent his castle is to being read.
 - **An enemy outside the walls hears which region is being reinforced, never
   which posts.** Stone gives away the sector and hides the detail.
-- **Distance and material are confusable.** Both act as low-pass, so a muffled
-  signal is either far away or behind stone. The classic detection ambiguity
-  falls out of the physics.
+- **Distance and material are confusable, desirably.** Both act as low-pass,
+  and highs attenuate faster with range, so spectral tilt carries range
+  information but never separates it cleanly from occlusion. *Is that a large
+  force far off or a small one close?* — the classic detection ambiguity,
+  emerging from the physics rather than modelled.
 
 ---
 
@@ -371,9 +398,15 @@ registering that anyone is watching.**
 ## 10. Reproducibility
 
 Every cell records only **how far its signal deviated from baseline, and at
-what tick**. Most cells at most ticks deviate not at all, so the trace is
-sparse and a quiet sector costs nothing. Nothing is random, so the same trace
-replays identically.
+what tick** — a finger drawing a line in sand.
+
+"Deviation from baseline" is the load-bearing phrase. Most cells at most ticks
+are *at* baseline and record nothing, so the trace is a sparse event log of
+`(cell, tick, band, deviation)`: nothing is written where nothing happened,
+and a quiet sector costs no storage at all.
+
+Nothing anywhere is random — engine accuracy converges rather than scatters,
+and no mechanic rolls dice — so the same trace replays identically, forever.
 
 One substrate serves three purposes that were otherwise three systems:
 
@@ -391,13 +424,49 @@ issued. Both are small.
 
 ## 11. Compute
 
-The field is steady-state superposition: nothing propagates through time.
-Each band is a shortest-path solve in −log(amplitude) space from each source,
-and a unit reads its own cell and its neighbours.
+The field is **steady-state superposition**: nothing is ever propagated
+through time. Each tuned location contributes an attenuation per band, and the
+field is the signed sum.
 
-The binding limit is not speed but **bit depth** — how many distinguishable
-orders fit in the frequency space. That limit is wanted: the vocabulary is
-finite by design.
+Stored as a per-cell band vector, a 24×24 map with 12 bands is 6,912 floats —
+a texture. Rebuilding it means splatting each source: roughly 576 cells × 20
+tuned sources ≈ 11.5k operations. A unit then does one lookup plus eight
+neighbour reads to find its gradient. Evaluated per-unit instead, 130 units ×
+20 sources × 12 bands is about 31k multiply-adds a tick.
+
+Phase cancellation costs nothing extra: opposed sides are 180° apart, so
+opposition is a signed sum per band rather than a simulation.
+
+Compare it to what it replaces. Evaluating conditions against the world every
+tick, for every unit, is more work than a texture read. The field is plausibly
+cheaper than a predicate system, not merely comparable.
+
+### Two conditions
+
+**The field must follow walkable paths, not free-space acoustics.** If a band
+propagated straight through geometry, units following its gradient would walk
+into stone. Attenuation is computed over traversable routes, which is why the
+loudest-path solve of §3 is the right shape and a straight-line falloff is
+not.
+
+**Reflections must be precomputed or dropped.** Genuine reflection off
+geometry is room acoustics: expensive, and the one part of this that could
+blow the budget. It is dropped — nothing reflects, and the specifier reaches
+the map by travelling open routes instead. That leaves the cost trivial with
+no precompute at all.
+
+Were reflection ever wanted, the escape exists: no wall repair, so castle
+geometry only ever loses material. A location-to-cell transfer could be
+computed once and patched locally when a wall falls.
+
+### The hard limit is bit depth, not cycles
+
+The binding constraint is not speed. It is **how many distinguishable orders
+fit in the frequency space** — how much order can be encoded in a chord before
+two of them sound the same to something that can only listen.
+
+Finite bands and finite intervals mean a finite vocabulary. That limit is
+wanted: the vocabulary is meant to be small enough to reason about.
 
 ---
 
