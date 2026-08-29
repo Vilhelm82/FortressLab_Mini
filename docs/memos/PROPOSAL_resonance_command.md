@@ -1257,3 +1257,52 @@ plan, the other decaying out of one.
 
 A route is therefore just an ordered stack of roots, and a messenger always
 has exactly one root: his next stop.
+
+---
+
+## 31. RESOLVED: parts within a company (Will, 26 Aug)
+
+**Orders can stipulate specific extensions to any combination of units within
+a company.** That is the mechanism that positions archers separately from
+spearmen, pikemen, swordsmen and polearm units. Each sub-group receives its
+own **triad, tetrad, pentad or hexad**, depending on the complexity of where,
+what and when those men must behave.
+
+So a company's score is **not one chord but a set of chords sharing a root.**
+
+| level | what it is |
+|---|---|
+| **company** | administrative — spawn, leader, shared root |
+| **part** | tactical — a sub-group with its own extension set |
+
+### What this resolves
+
+**The 10 am order now compiles in full.** *"Send two men-at-arms back to clear
+messenger routes"* is a part: those men carry their own extensions above the
+shared root, and the clause that releases them silences only their notes. This
+was the last clause of the canonical fixture with no translation — the §25
+acceptance bar looks passable.
+
+**Detachment is expressible without breaking the hierarchy.** The sergeant
+still only modulates and attenuates (§21) and changes nothing: the multi-line
+score came from the commander. A company sings in parts because it was written
+that way, not because its officer improvised.
+
+**Claude's §13 "parts" flag is closed**, and was under-specified — it imagined
+different degrees of one chord. The real mechanism is richer: genuinely
+separate chords over a shared root.
+
+### Vocabulary
+
+With 6 non-root degrees available, there are **63 distinct part-chords**
+(non-empty subsets) that can sit over any of the 72 root+dyad addresses. A
+company carries as many distinct parts as the commander writes.
+
+### OPEN QUESTION (not assumed)
+
+**How is a part addressed to specific men?** The commander works from a stale
+quilt and does not know individuals — he knows he has a company of ten with a
+composition. Claude's reading, flagged as a reading: a part is addressed by
+**(unit type, count)** — *"the three archers"*, *"two men-at-arms"* — which is
+exactly how the 10 am order phrases it, and never by identity. Confirm or
+correct.
