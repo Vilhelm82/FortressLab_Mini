@@ -566,3 +566,66 @@ travel along **open paths**, round corners, without reflecting?
 
 This decides whether the resonance field is a visibility field or the existing
 Dijkstra cost field wearing new clothes.
+
+---
+
+## 18. The low-pass cap — one mechanic for sight and hearing (Will, 26 Aug)
+
+**Absorption is capped with a low-pass filter.** Units can hear the low
+frequencies of where they need to go *through* geometry; all higher
+frequencies are filtered and absorbed by it.
+
+**The LPF cutoff is tuned per material.** Stone absorbs more than timber — so
+an enemy is **invisible behind stone but detectable behind timber**.
+
+**This one mechanic covers sight and hearing.** There is no separate visibility
+system.
+
+### Reading the enemy from the wave
+
+The **magnitude of destructive interference implies the strength and
+composition** of an enemy company. **All archers emit the same interval; all
+men-at-arms emit the same interval.** So a watchman drawn to the direction of
+the interference can accurately report *what units and how many* purely from
+the sound wave.
+
+### Consequences
+
+**§17's open question is answered — neither strict LOS nor pure open-path.**
+Transmission is *frequency-dependent*: bass penetrates geometry, detail does
+not. Navigation therefore works everywhere (a unit always hears roughly where
+it must go, even round a corner) while perception of *what stands between* does
+not. Exactly the property a fog game wants.
+
+**Material choice becomes a perception design lever — a new one.** Timber is
+cheaper and faster but leaks information; stone is opaque but costly. The
+player is no longer choosing only strength and dig-time, but **how transparent
+his castle is to being read.** This is a genuine Game A decision that did not
+exist before.
+
+**Intelligence reports become spectra.** A sync record is what a unit heard:
+intervals, amplitudes, directions. The 30-second window is a rolling
+recording; the messenger's **logbook is literally a set of recordings**; the
+commander's quilt is a spectral mosaic. The belief field consumes this
+directly.
+
+**Distance and material are confusable — desirably.** Both act as low-pass.
+A muffled signal is either far away or behind stone, and highs attenuate
+faster with distance, so spectral tilt carries range information but never
+cleanly separates it from occlusion. The classic detection ambiguity — *is
+that a large force far off or a small one close?* — emerges from the physics
+rather than being modelled.
+
+### OPEN QUESTION (not assumed)
+
+**Does facing survive?** The ruled perception model has front/periphery/rear
+arcs and a **stealth kill on a facing-away target**. Acoustic perception is
+naturally omnidirectional — you hear behind you. Either:
+
+- facing still shapes *emission* (a unit sings forward, so cancellation is
+  strongest ahead) and the arcs survive in modified form; or
+- detection becomes omnidirectional and the ruled stealth kill needs
+  re-deriving from something else.
+
+This is the last ruled mechanic the resonance system has not yet accounted
+for.
