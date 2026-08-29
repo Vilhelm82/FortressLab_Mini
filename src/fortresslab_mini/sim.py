@@ -19,7 +19,8 @@ from dataclasses import dataclass, field
 from fortresslab_mini.kernel import cheb
 from fortresslab_mini.worldmap import DIRS8, BREACH
 from fortresslab_mini.enemy_brain import cost_field
-from fortresslab_mini.orders import OrderExec, company_status, FERAL, STALE
+from fortresslab_mini.score import (ScoreExec, company_status, SELF_DIRECTED,
+                                    STALE)
 from fortresslab_mini.perception import (Perception, facing_from_delta, RING,
                                          IDENTIFIED, PRESENCE, NOTHING)
 
@@ -53,7 +54,7 @@ class Company:
     side: int
     officer: int = -1              # uid, or -1 for none
     members: list = field(default_factory=list)
-    order: OrderExec = None
+    order: ScoreExec = None
     initial: int = 0
     goal: tuple = None             # current destination, from the order node
 
@@ -169,7 +170,7 @@ class Sim:
         if foe is not None:
             if c is None or c.order is None or company_status(
                     self.units[c.officer].alive if c.officer in self.units
-                    else False, c.order) == FERAL:
+                    else False, c.order) == SELF_DIRECTED:
                 return (foe.x, foe.y)
             x0, y0, x1, y1 = c.order.current_scope()["area"]
             if x0 <= foe.x <= x1 and y0 <= foe.y <= y1:

@@ -43,7 +43,7 @@ def tasked_sectors(s, acts):
     out = []
     for a in acts:
         if a[0] in ("task", "spawn"):
-            x0, y0, x1, y1 = a[-1]["scope"]["area"]
+            x0, y0, x1, y1 = a[-1]["area"]
             out.append(sector_of(s, (x0 + x1) // 2, (y0 + y1) // 2))
     return out
 
@@ -126,9 +126,9 @@ def test_lightly_guarded_enemy_commander_draws_a_strike():
                                       (20, 21, "enemy", 2)])],
             companies=[company(1, (14, 14))])
     strikes = [a for a in decide(s) if a[0] == "task"
-               and "attack" in a[2]["scope"]["kinds"]]
+               and "attack" in a[2]["kinds"]]
     assert strikes, "opportunity ignored"
-    x0, y0, x1, y1 = strikes[0][2]["scope"]["area"]
+    x0, y0, x1, y1 = strikes[0][2]["area"]
     assert x0 <= 20 <= x1 and y0 <= 20 <= y1
 
 
@@ -138,7 +138,7 @@ def test_heavily_guarded_commander_is_not_prey():
                            sightings=[(20, 20, "C", 1),
                                       (20, 21, "enemy", 9)])],
             companies=[company(1, (14, 14))])
-    assert not any(a[0] == "task" and "attack" in a[2]["scope"]["kinds"]
+    assert not any(a[0] == "task" and "attack" in a[2]["kinds"]
                    for a in decide(s))
 
 
@@ -149,7 +149,7 @@ def test_dark_sector_draws_a_scout():
             companies=[], credits=10, now=100)
     scouts = [a for a in decide(s) if a[0] == "scout"]
     assert scouts
-    x0, y0, x1, y1 = scouts[0][1]["scope"]["area"]
+    x0, y0, x1, y1 = scouts[0][1]["area"]
     assert sector_of(s, (x0 + x1) // 2, (y0 + y1) // 2) == "SW"
 
 

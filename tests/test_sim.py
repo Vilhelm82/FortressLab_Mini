@@ -1,27 +1,26 @@
 """
 Tick-loop battery — the first tests where anything actually MOVES.
 
-The kernel proved resolution, the ladder proved the cost field, the orders
-battery proved the grammar. This proves they compose.
+The kernel proved resolution, the ladder proved the cost field, the score
+battery proved the performance. This proves they compose.
 """
 
 import pytest
 
 from fortresslab_mini.worldmap import WorldMap
-from fortresslab_mini.orders import OrderExec, contact, losses_at_least, FERAL
+from fortresslab_mini.score import (ScoreExec, cancellation, attrition, note,
+                                    score, silence, SELF_DIRECTED)
 from fortresslab_mini.sim import Sim, HOME, AWAY, acts_this_tick
 
 FLAT = ["." * 16 for _ in range(12)]
 
 
 def hold_order(area):
-    """Valid by the x-or-y rule: recalled, or half losses."""
-    sc = {"kinds": {"defend"}, "area": area}
-    return {"scope": sc, "start": "hold",
-            "nodes": {"hold": {"scope": sc, "edges": [
-                {"when": contact("messenger"), "release": "recalled"}]}},
-            "global_edges": [{"when": losses_at_least(1, 2),
-                              "release": "return"}]}
+    """A held address: richness dies if the ground is lost or we are halved.
+    Attrition is the self-resolving note, so the score always ends."""
+    return score(area, [note(silence(), label="ground-lost"),
+                        note(attrition(1, 2), label="halved")],
+                 kinds=("defend",))
 
 
 def test_cadence_hook_is_the_only_switch():

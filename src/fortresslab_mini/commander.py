@@ -1,26 +1,26 @@
 """
-Commander v0 — the decision loop, built to be examined.
+Commander — the decision loop, resonance-native (rewritten 26 Aug 2026).
 
 Input:  a SITUATION — the commander's quilt (timestamped patches), his roster,
-        his credits, the clock.
-Output: a DECISION — orders dispatched, purchases made, scouts sent, or
-        explicitly nothing. Every emitted order passes the real validator; an
-        illegal order from the commander is a harness failure, not a bad play.
+        his credits.
+Output: a DECISION — scores dispatched, purchases made, scouts sent, or
+        explicitly nothing. Every emitted score passes validate_score; an
+        unsingable score from the commander is a harness failure, not a bad
+        play.
 
-v0 is deliberately simple and legible: fuse the quilt (last-write-wins per
-area, freshness-weighted), cluster sightings into threats, score by
-mass x freshness / response distance, match unlocked companies to threats,
-convert credits when uncovered threat remains, and close dark loops with
-scouts. The point is not sophistication — it is that the WAR COLLEGE battery
-(tests/test_war_college.py) defines the behavioural contract every smarter
-commander must also pass.
+The commander does not assign units to threats one by one. He TUNES
+LOCATIONS: he picks an address and states what would kill its richness. Units
+find their own way by harmonisation (resonance.navigate_target) and route by
+least detection. This module decides WHERE and WHAT CONDITIONS — never HOW.
 
-Every tunable in CONFIG. Floats permitted (ruled 2026-08-20).
+No clock. No predicate grammar. Conditions come from the closed vocabulary in
+score.py, all of which a unit can hear or know of itself.
 """
 
 from collections import deque
 
-from fortresslab_mini.orders import validate_order, contact, losses_at_least
+from fortresslab_mini.score import (attrition, cancellation, clear, note,
+                                    score, silence, spent, validate_score)
 
 CONFIG = {
     "decay": 0.97,          # per-tick freshness discount on a sighting
@@ -120,31 +120,30 @@ def sector_age(sit, name):
     return (sit.now - max(ages)) if ages else None
 
 
-def defend_order(area):
-    sc = {"kinds": {"defend", "move"}, "area": area}
-    return {"scope": sc, "start": "hold",
-            "nodes": {"hold": {"scope": sc, "edges": [
-                {"when": contact("messenger"), "release": "recalled"}]}},
-            "global_edges": [{"when": losses_at_least(1, 2),
-                              "release": "return"}]}
+# --- the three score shapes the commander writes ----------------------------
+
+def hold_score(area):
+    """Hold this address. Richness dies if the ground is lost, or if we are
+    halved. Both are self-audible; attrition guarantees the exit."""
+    return score(area, [note(silence(), label="ground-lost"),
+                        note(attrition(1, 2), label="halved")],
+                 kinds=("defend", "move"))
 
 
-def strike_order(area):
-    sc = {"kinds": {"attack", "move"}, "area": area}
-    return {"scope": sc, "start": "strike",
-            "nodes": {"strike": {"scope": sc, "edges": [
-                {"when": contact("messenger"), "release": "recalled"}]}},
-            "global_edges": [{"when": losses_at_least(1, 2),
-                              "release": "return"}]}
+def strike_score(area):
+    """Go and remove the interference. Richness dies when the opposition is
+    gone, or when we are halved."""
+    return score(area, [note(clear("enemy"), label="cleared"),
+                        note(attrition(1, 2), label="halved")],
+                 kinds=("attack", "move"))
 
 
-def scout_order(area):
-    sc = {"kinds": {"observe", "move"}, "area": area}
-    return {"scope": sc, "start": "watch",
-            "nodes": {"watch": {"scope": sc, "edges": [
-                {"when": contact("messenger"), "release": "relieved"}]}},
-            "global_edges": [{"when": losses_at_least(1, 2),
-                              "release": "return"}]}
+def watch_score(area):
+    """Stand and listen. Dies on contact or attrition — a watchman is
+    non-combat, so cancellation is his cue to leave, not to fight."""
+    return score(area, [note(cancellation("enemy", 1), label="contact"),
+                        note(attrition(1, 2), label="halved")],
+                 kinds=("observe", "move"))
 
 
 def _area_around(sit, x, y, r=3):
@@ -153,10 +152,10 @@ def _area_around(sit, x, y, r=3):
 
 
 def decide(sit, cfg=CONFIG):
-    """The loop, v0. Returns a list of actions:
-       ("task", cid, order) | ("spawn", order) | ("scout", order) | ("hold",)
-    Every order emitted is validator-checked — the commander cannot issue
-    what the grammar refuses."""
+    """The loop. Returns a list of actions:
+       ("task", cid, score) | ("spawn", score) | ("scout", score) | ("hold",)
+    Every score emitted is validated — the commander cannot issue what cannot
+    be sung."""
     acts = []
     credits = sit.credits
     free = [c for c in sit.companies if not c["locked"]]
@@ -169,11 +168,12 @@ def decide(sit, cfg=CONFIG):
             near = min(free, key=lambda c: dist.get(tuple(c["pos"]), 1e9))
             if dist.get(tuple(near["pos"]), 1e9) < (sit.w + sit.h):
                 acts.append(("task", near["cid"],
-                             strike_order(_area_around(sit, g["x"], g["y"]))))
+                             strike_score(_area_around(sit, g["x"], g["y"]))))
                 free.remove(near)
             break
 
-    # 2. Threats by score: nearest free company each; else convert credits.
+    # 2. Threats by score: tune the location; the nearest free company hears
+    #    it. Else convert credits into a new voice.
     for g in ths:
         if "C" in g["cls"] and g["n"] <= cfg["strike_guard_max"] + 1:
             continue
@@ -181,10 +181,10 @@ def decide(sit, cfg=CONFIG):
         if free:
             dist = bfs_field(sit, (g["x"], g["y"]))
             near = min(free, key=lambda c: dist.get(tuple(c["pos"]), 1e9))
-            acts.append(("task", near["cid"], defend_order(area)))
+            acts.append(("task", near["cid"], hold_score(area)))
             free.remove(near)
         elif credits >= cfg["company_cost"]:
-            acts.append(("spawn", defend_order(area)))
+            acts.append(("spawn", hold_score(area)))
             credits -= cfg["company_cost"]
 
     # 3. Dark loops: a sector unseen too long gets a scout.
@@ -192,15 +192,15 @@ def decide(sit, cfg=CONFIG):
         age = sector_age(sit, name)
         if (age is None or age > cfg["dark_age"]) \
                 and credits >= cfg["scout_cost"]:
-            acts.append(("scout", scout_order(sit.sectors[name])))
+            acts.append(("scout", watch_score(sit.sectors[name])))
             credits -= cfg["scout_cost"]
             break
 
     if not acts:
         acts.append(("hold",))
 
-    for a in acts:                       # the law: nothing leaves malformed
+    for a in acts:                       # the law: nothing unsingable leaves
         if a[0] in ("task", "spawn", "scout"):
-            ok, why = validate_order(a[-1])
-            assert ok, f"commander emitted an illegal order: {why}"
+            ok, why = validate_score(a[-1])
+            assert ok, "commander emitted an unsingable score: %s" % (why,)
     return acts
