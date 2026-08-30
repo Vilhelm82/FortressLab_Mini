@@ -62,6 +62,8 @@ pub mod tuning {
         pub attention_cost: f64,
         pub tau_concern: f64,
         pub concern_max: f64,
+        pub concern_knee: f64,
+        pub concern_ratio: f64,
     }
 
     impl Default for Tuning {
@@ -89,6 +91,8 @@ pub mod tuning {
                 attention_cost: ATTENTION_COST,
                 tau_concern: TAU_CONCERN,
                 concern_max: CONCERN_MAX,
+                concern_knee: CONCERN_KNEE,
+                concern_ratio: CONCERN_RATIO,
             }
         }
     }
@@ -179,8 +183,15 @@ pub mod tuning {
     /// Where he cannot read the room it does not die at all — that factor
     /// is what a corridor is worth, and it is worth nothing on its own.
     pub const TAU_CONCERN: f64 = 25.0;
-    /// A man can only be worried about so much at once.
-    pub const CONCERN_MAX: f64 = 3.0;
+    /// The ceiling. A true limiter and a long way up — the compressor below
+    /// should be doing the work long before anything reaches this.
+    pub const CONCERN_MAX: f64 = 12.0;
+    /// Where the compressor starts working. Below this a worry is felt at
+    /// its full size.
+    pub const CONCERN_KNEE: f64 = 0.8;
+    /// How hard everything above the knee is squashed. 1 is no compression,
+    /// infinity is a brick wall.
+    pub const CONCERN_RATIO: f64 = 4.0;
 }
 
 pub use tuning::*;
@@ -544,6 +555,23 @@ impl Soma {
         Soma { arousal: 0.0, load, concern: 0.0, numb: false }
     }
 
+    /// What he is actually acting on, after the compressor.
+    ///
+    /// Raw concern accumulates however it likes; what reaches him is
+    /// squashed above the knee at the ratio. So the difference between a
+    /// noise and two noises is most of what he feels, and the difference
+    /// between eight and nine is almost nothing — which is how a man works
+    /// and is not how a hard ceiling works. A clamp is a brick-wall
+    /// limiter: everything below it untouched, everything above it flat,
+    /// and a nasty corner where the two meet.
+    pub fn felt(&self, t: &Tuning) -> f64 {
+        if self.concern <= t.concern_knee {
+            self.concern
+        } else {
+            t.concern_knee + (self.concern - t.concern_knee) / t.concern_ratio
+        }
+    }
+
     /// How badly he can resolve what he is worried about, 0 to 1.
     pub fn unresolved(&self, strain: f64, t: &Tuning) -> f64 {
         dread(strain, t) / t.suspense_gain
@@ -632,7 +660,7 @@ impl Soma {
         // Sensitisation is a startle threshold: it sharpens what HAPPENS to
         // him, not the chronic weight of a bad room. A battered man jumps at
         // timber creaks — a creak is an event. Dread is not.
-        let suspense = self.concern * dread(strain, t);
+        let suspense = self.felt(t) * dread(strain, t);
         let events: f64 = impacts.iter().map(|i| i.weight()).sum();
         let input = suspense + self.sensitivity(t) * events / dt;
 

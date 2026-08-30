@@ -318,3 +318,36 @@ fn the_border_takes_the_shape_of_whatever_carries_belonging() {
     assert!(reach(6.0) > reach(3.0), "a field that carries further reaches further");
     assert!(reach(3.0) > 0.0);
 }
+
+/// A compressor, not a brick wall.
+///
+/// Below the knee a worry is felt at its full size. Above it, everything is
+/// squashed at the ratio — so the difference between one noise and two is
+/// most of what he feels, and the difference between eight and nine is
+/// almost nothing. A clamp gives you a corner; this gives you a curve.
+#[test]
+fn concern_is_compressed_above_the_knee_and_untouched_below() {
+    let t = tune();
+    let felt = |c: f64| Soma { arousal: 0.0, load: 0.0, concern: c, numb: false }.felt(&t);
+
+    // untouched below the knee
+    assert!((felt(t.concern_knee * 0.5) - t.concern_knee * 0.5).abs() < 1e-12);
+
+    // squashed above it, at the ratio
+    let a = felt(t.concern_knee + 4.0);
+    let b = felt(t.concern_knee + 8.0);
+    assert!((b - a - 4.0 / t.concern_ratio).abs() < 1e-9);
+
+    // and still monotone, so a worse situation is never felt as a better one
+    let mut last = -1.0;
+    for i in 0..200 {
+        let v = felt(i as f64 * 0.1);
+        assert!(v > last);
+        last = v;
+    }
+
+    // the first worry must matter far more than the ninth
+    let first = felt(0.5) - felt(0.0);
+    let ninth = felt(9.0) - felt(8.5);
+    assert!(first > 3.0 * ninth, "piling worries on must give diminishing returns");
+}
