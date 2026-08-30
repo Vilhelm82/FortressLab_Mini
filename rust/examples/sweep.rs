@@ -50,12 +50,16 @@ fn open_strain(t: &Tuning) -> f64 {
 }
 
 /// Seconds until the latch, if it ever trips.
+/// A man who has been TOLD something got inside, and is now standing there
+/// trying to place it. Geometry alone frightens nobody — the alert is the
+/// thing the corridor is allowed to work on.
 fn seconds_to_break(strain: f64, allies: usize, t: &Tuning, limit: f64) -> Option<f64> {
     let mut s = Soma::fresh();
+    s.concern = 1.0;
     let mut c = Choir::new(allies, t);
     let n = (limit / TICK_SECONDS) as usize;
     for i in 0..n {
-        s.tick(strain, &[], &mut c, t);
+        s.tick(strain, &[], 0.0, &mut c, t);
         if s.numb {
             return Some(i as f64 * TICK_SECONDS);
         }
@@ -68,7 +72,7 @@ fn load_after(start: f64, allies: usize, secs: f64, t: &Tuning) -> f64 {
     let mut s = Soma::battered(start);
     let mut c = Choir::new(allies, t);
     for _ in 0..((secs / TICK_SECONDS) as usize) {
-        s.tick(t.strain_rest, &[], &mut c, t);
+        s.tick(t.strain_rest, &[], 0.0, &mut c, t);
     }
     s.load
 }
@@ -129,6 +133,7 @@ fn jitter(base: &Tuning, r: &mut Rng, spread: f64) -> Tuning {
     t.arousal_scale *= r.factor(spread);
     t.fence_load *= r.factor(spread);
     t.bath_coupling *= r.factor(spread);
+    t.tau_concern *= r.factor(spread);
     t
 }
 
@@ -205,4 +210,5 @@ fn main() {
     span("arousal_scale", |t| t.arousal_scale, &ok, &base);
     span("fence_load", |t| t.fence_load, &ok, &base);
     span("bath_coupling", |t| t.bath_coupling, &ok, &base);
+    span("tau_concern", |t| t.tau_concern, &ok, &base);
 }

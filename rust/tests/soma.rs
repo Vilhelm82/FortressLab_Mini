@@ -24,7 +24,7 @@ fn corridor() -> (Bearing, Bearing, Bearing) {
 fn run(s: &mut Soma, choir: &mut Choir, strain: f64, ticks: usize) -> Vec<f64> {
     (0..ticks)
         .map(|_| {
-            s.tick(strain, &[], choir, &tune());
+            s.tick(strain, &[], 0.0, choir, &tune());
             s.load
         })
         .collect()
@@ -53,32 +53,65 @@ fn dread_saturates_however_bad_the_geometry_gets() {
     assert!(dread(1e3, &tune()) > dread(2.0, &tune()));
 }
 
+/// Geometry is a multiplier on a worry, never a source of one. A man with
+/// nothing on his mind can stand in the worst corridor in the castle all
+/// night. This replaces an earlier test of mine that asserted the opposite —
+/// it encoded the model before Will corrected it.
 #[test]
-fn the_quiet_winds_a_man_up_with_nothing_happening() {
+fn a_man_with_nothing_on_his_mind_is_untouched_by_the_worst_geometry() {
     let (p, q, r) = corridor();
     let strain = fix(p, q, r, &tune()).strain;
     let mut s = Soma::fresh();
     let mut choir = Choir::new(0, &tune());
-    let start = s.arousal;
-    for _ in 0..200 {
-        s.tick(strain, &[], &mut choir, &tune());
+    for _ in 0..3000 {
+        s.tick(strain, &[], 0.0, &mut choir, &tune());
     }
-    assert!(s.arousal > start, "no event occurred and he should still be worse");
+    assert_eq!(s.arousal, 0.0);
+    assert_eq!(s.load, 0.0);
+    assert!(!s.numb);
+}
+
+/// Told that something got inside, the same man winds up — and the corridor
+/// is what stops him settling it. In a room he can read, the worry dies on
+/// its own.
+#[test]
+fn a_worry_dies_in_a_room_a_man_can_read_and_will_not_in_a_corridor() {
+    let (p, q, r) = corridor();
+    let (a, c, d) = open();
+    let bad = fix(p, q, r, &tune()).strain;
+    let good = fix(a, c, d, &tune()).strain;
+
+    let settle = |strain: f64| {
+        let mut s = Soma::fresh();
+        let mut ch = Choir::new(0, &tune());
+        s.tick(strain, &[], 1.0, &mut ch, &tune());
+        let raised = s.concern;
+        for _ in 0..600 {
+            s.tick(strain, &[], 0.0, &mut ch, &tune());
+        }
+        (raised, s.concern, s.arousal)
+    };
+    let (r0, open_left, open_arousal) = settle(good);
+    let (r1, tight_left, tight_arousal) = settle(bad);
+
+    assert!(r0 > 0.0 && (r0 - r1).abs() < 1e-9, "both men were told the same thing");
+    assert!(open_left < tight_left, "a readable room settles a question");
+    assert!(open_arousal < tight_arousal, "and an unsettled question is what costs him");
 }
 
 #[test]
 fn arousal_opens_the_border_and_load_stiffens_it() {
-    let calm = Soma { arousal: 0.0, load: 0.0, numb: false };
-    let scared = Soma { arousal: 4.0, load: 0.0, numb: false };
-    let scared_and_battered = Soma { arousal: 4.0, load: 8.0, numb: false };
+    let calm = Soma { arousal: 0.0, load: 0.0, concern: 0.0, numb: false };
+    let scared = Soma { arousal: 4.0, load: 0.0, concern: 0.0, numb: false };
+    let scared_and_battered = Soma { arousal: 4.0, load: 8.0, concern: 0.0, numb: false };
     assert!(scared.permeability(&tune()) < calm.permeability(&tune()));
     assert!(scared_and_battered.permeability(&tune()) > scared.permeability(&tune()));
 }
 
 #[test]
 fn a_border_that_holds_lets_nothing_through_and_no_border_lets_everything() {
-    let calm = Soma { arousal: 0.0, load: 0.0, numb: false };
-    let numb = Soma { arousal: 0.0, load: LOAD_MAX, numb: true };
+    let calm = Soma { arousal: 0.0, load: 0.0, concern: 0.0, numb: false };
+    let numb = Soma { arousal: 0.0, load: LOAD_MAX, concern: 0.0, numb: true };
     assert!(calm.crossing(1.0, &tune()).abs() < 1e-12);
     assert!((numb.crossing(1.0, &tune()) - 1.0).abs() < 1e-12);
 }
@@ -147,7 +180,7 @@ fn the_same_setup_runs_the_same_way_twice() {
         (0..400)
             .map(|t| {
                 let ev: &[Impact] = if t == 100 { &[Impact::NearMiss] } else { &[] };
-                s.tick(strain, ev, &mut c, &tune());
+                s.tick(strain, ev, 0.0, &mut c, &tune());
                 (s.arousal.to_bits(), s.load.to_bits())
             })
             .collect::<Vec<_>>()
@@ -182,9 +215,9 @@ fn a_man_at_his_post_hears_more_of_his_own_chord_than_one_far_from_it() {
 
 #[test]
 fn fright_costs_a_man_the_song() {
-    let calm = Soma { arousal: 0.0, load: 0.0, numb: false };
-    let scared = Soma { arousal: 5.0, load: 0.0, numb: false };
-    let numb = Soma { arousal: 5.0, load: LOAD_MAX, numb: true };
+    let calm = Soma { arousal: 0.0, load: 0.0, concern: 0.0, numb: false };
+    let scared = Soma { arousal: 5.0, load: 0.0, concern: 0.0, numb: false };
+    let numb = Soma { arousal: 5.0, load: LOAD_MAX, concern: 0.0, numb: true };
     assert!(scared.hold(0.8, &tune()) < calm.hold(0.8, &tune()));
     assert_eq!(numb.hold(0.8, &tune()), 0.0);
 }
@@ -215,7 +248,11 @@ fn a_choir_lets_a_man_survive_a_thinner_hold_on_the_song() {
         for t in 0..900 {
             let strain = fix(post, anchor(post, s.hold(offered, &tune())), threat, &tune()).strain;
             let ev: &[Impact] = if t == 100 { &[Impact::AllyDeath] } else { &[] };
-            s.tick(strain, ev, &mut c, &tune());
+            // There is a fight going on around him: a standing reason to
+            // worry, topped up faster than he can settle it. Without that
+            // the geometry is worth nothing and nobody breaks — which is
+            // the whole point of concern being a separate quantity.
+            s.tick(strain, ev, 0.02, &mut c, &tune());
         }
         s.numb
     }

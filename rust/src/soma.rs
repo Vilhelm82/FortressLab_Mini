@@ -97,6 +97,21 @@ impl Impact {
             Impact::KillDelivered => 0.8,
         }
     }
+
+    /// How much of a reason this is to think something is still out there.
+    ///
+    /// Separate from weight. A near miss is a small shock and a large
+    /// question — the thing that nearly had you is still somewhere. A kill
+    /// delivered is the opposite: a shock that ANSWERS one.
+    pub fn concern(self) -> f64 {
+        match self {
+            Impact::NearMiss => 1.0,
+            Impact::AllyDeath => 1.2,
+            Impact::ChordFracture => 0.6,
+            Impact::Melee => 0.0,
+            Impact::KillDelivered => -0.8,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
@@ -187,13 +202,24 @@ pub struct Soma {
     pub arousal: f64,
     /// The slow bucket. What the day has cost him.
     pub load: f64,
+    /// Something is out there and he has not accounted for it.
+    ///
+    /// Bad geometry is not itself frightening. A man with nothing on his
+    /// mind can stand in the worst corridor in the castle all night. What
+    /// the corridor does is stop him settling a question he already has —
+    /// so dread is concern multiplied by how badly he can resolve it, and
+    /// with no concern the geometry is worth nothing at all.
+    ///
+    /// It has to persist, or he would stop looking the moment the noise
+    /// stopped.
+    pub concern: f64,
     /// Latched at the ceiling. He cannot be recalled and he does not flinch.
     pub numb: bool,
 }
 
 impl Default for Soma {
     fn default() -> Self {
-        Soma { arousal: 0.0, load: 0.0, numb: false }
+        Soma { arousal: 0.0, load: 0.0, concern: 0.0, numb: false }
     }
 }
 
@@ -219,7 +245,12 @@ impl Soma {
 
     /// A man who has been through it. For scenarios that need one.
     pub fn battered(load: f64) -> Soma {
-        Soma { arousal: 0.0, load, numb: false }
+        Soma { arousal: 0.0, load, concern: 0.0, numb: false }
+    }
+
+    /// How badly he can resolve what he is worried about, 0 to 1.
+    pub fn unresolved(&self, strain: f64, t: &Tuning) -> f64 {
+        dread(strain, t) / t.suspense_gain
     }
 
     /// How permeable his border is, in radians.
@@ -278,13 +309,30 @@ impl Soma {
     /// unlike the impacts, which are things that actually happened. The
     /// still corridor supplies the first and none of the second, which is
     /// the whole point of it.
-    pub fn tick(&mut self, strain: f64, impacts: &[Impact], choir: &mut Choir, t: &Tuning) {
+    pub fn tick(
+        &mut self,
+        strain: f64,
+        impacts: &[Impact],
+        alert: f64,
+        choir: &mut Choir,
+        t: &Tuning,
+    ) {
         let dt = TICK_SECONDS;
+
+        // What is out there that he has not accounted for. Alerts and the
+        // events that raise questions put it up; a kill answers one.
+        let raised: f64 = alert + impacts.iter().map(|i| i.concern()).sum::<f64>();
+        // He settles a question at a rate set by how well he can see. In an
+        // open room a worry dies on its own; in a corridor it will not, and
+        // that is the whole of what the corridor does to him.
+        let unresolved = self.unresolved(strain, t);
+        self.concern += dt * (raised / dt - self.concern * (1.0 - unresolved) / t.tau_concern);
+        self.concern = self.concern.clamp(0.0, t.concern_max);
 
         // Sensitisation is a startle threshold: it sharpens what HAPPENS to
         // him, not the chronic weight of a bad room. A battered man jumps at
         // timber creaks — a creak is an event. Dread is not.
-        let suspense = dread(strain, t);
+        let suspense = self.concern * dread(strain, t);
         let events: f64 = impacts.iter().map(|i| i.weight()).sum();
         let input = suspense + self.sensitivity(t) * events / dt;
 

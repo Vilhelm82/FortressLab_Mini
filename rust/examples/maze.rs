@@ -32,6 +32,7 @@ fn look(at: (f64, f64, f64), to: (f64, f64, f64)) -> Bearing {
 
 struct Row {
     tick: usize,
+    concern: f64,
     strain: f64,
     arousal: f64,
     load: f64,
@@ -42,13 +43,13 @@ struct Row {
 fn print_rows(rows: &[Row], every: usize) {
     println!(
         "  {:>4}  {:>9}  {:>7}  {:>7}  {:>6}  {:<14} {:<14}",
-        "tick", "strain", "arousal", "load", "perm", "arousal", "load"
+        "tick", "concern", "arousal", "load", "perm", "arousal", "load"
     );
     for r in rows.iter().filter(|r| r.tick % every == 0) {
         println!(
             "  {:>4}  {:>9.3}  {:>7.3}  {:>7.3}  {:>6.3}  {:<14} {:<14} {}",
             r.tick,
-            r.strain,
+            r.concern,
             r.arousal,
             r.load,
             r.perm,
@@ -61,7 +62,7 @@ fn print_rows(rows: &[Row], every: usize) {
 
 /// A corridor running east–west, a post behind him, a walk above, and a
 /// side door. He hears something he cannot place, and then it arrives.
-fn hallway(mate_on_the_walk: bool) -> Vec<Row> {
+fn hallway(mate_on_the_walk: bool, alerted: bool) -> Vec<Row> {
     let me = (10.0, 5.0, 1.0);
     let post = (2.0, 5.0, 1.0);
     let mouth = (24.0, 5.0, 1.0);
@@ -80,12 +81,15 @@ fn hallway(mate_on_the_walk: bool) -> Vec<Row> {
         let b_threat = if t < 160 { look(me, mouth) } else { look(me, door) };
         let f = fix(b_post, b_third, b_threat, &tune());
 
-        // The only event in the whole run: the door goes in.
+        // t=60: word reaches him that something got inside. Nothing else
+        // happens until the door goes in at t=160.
+        let alert = if alerted && t == 60 { 1.0 } else { 0.0 };
         let impacts: &[Impact] = if t == 160 { &[Impact::NearMiss] } else { &[] };
 
-        s.tick(f.strain, impacts, &mut choir, &tune());
+        s.tick(f.strain, impacts, alert, &mut choir, &tune());
         rows.push(Row {
             tick: t,
+            concern: s.concern,
             strain: f.strain,
             arousal: s.arousal,
             load: s.load,
@@ -105,9 +109,10 @@ fn recovery(allies: usize, ticks: usize) -> Vec<Row> {
     let mut rows = Vec::new();
     for t in 0..ticks {
         // Open geometry, nothing happening: no suspense, no events.
-        s.tick(STRAIN_REST, &[], &mut choir, &tune());
+        s.tick(STRAIN_REST, &[], 0.0, &mut choir, &tune());
         rows.push(Row {
             tick: t,
+            concern: s.concern,
             strain: STRAIN_REST,
             arousal: s.arousal,
             load: s.load,
@@ -119,24 +124,28 @@ fn recovery(allies: usize, ticks: usize) -> Vec<Row> {
 }
 
 fn main() {
-    println!("\n=== THE HALLWAY — alone ===");
-    println!("  corridor, post behind, nothing to fix against.");
-    println!("  t=160 the side door goes in.\n");
-    let alone = hallway(false);
+    println!("\n=== THE HALLWAY — nobody has told him anything ===");
+    println!("  alone in the corridor, no reason to be worried.\n");
+    let idle = hallway(false, false);
+    print_rows(&idle, 40);
+
+    println!("\n=== THE HALLWAY — word came that something got inside ===");
+    println!("  same corridor. alert at t=60, the side door goes in at t=160.\n");
+    let alone = hallway(false, true);
     print_rows(&alone, 20);
 
-    println!("\n=== THE HALLWAY — a mate up on the walk ===");
-    println!("  same corridor, same door, one man above him.\n");
-    let paired = hallway(true);
-    print_rows(&paired, 20);
+    println!("\n=== THE HALLWAY — same word, a mate up on the walk ===\n");
+    let paired = hallway(true, true);
+    print_rows(&paired, 40);
 
-    println!("\n  peak arousal   alone {:.3}   paired {:.3}",
+    println!("\n  peak arousal   idle {:.3}   alone {:.3}   paired {:.3}",
+        idle.iter().map(|r| r.arousal).fold(0.0, f64::max),
         alone.iter().map(|r| r.arousal).fold(0.0, f64::max),
         paired.iter().map(|r| r.arousal).fold(0.0, f64::max));
-    println!("  strain in the quiet   alone {:.3}   paired {:.3}",
-        alone[100].strain, paired[100].strain);
-    println!("  strain once the door is in   alone {:.3}   paired {:.3}",
-        alone[200].strain, paired[200].strain);
+    println!("  concern at t=150 (just before the door)   idle {:.3}   alone {:.3}   paired {:.3}",
+        idle[150].concern, alone[150].concern, paired[150].concern);
+    println!("  concern at t=259 (after it resolved)      idle {:.3}   alone {:.3}   paired {:.3}",
+        idle[259].concern, alone[259].concern, paired[259].concern);
 
     println!("\n=== RECOVERY — a battered man left in silence ===");
     for allies in [0usize, 2, 12] {
@@ -162,8 +171,8 @@ fn main() {
     }
 
     println!("\n=== DETERMINISM ===");
-    let a = hallway(true);
-    let b = hallway(true);
+    let a = hallway(true, true);
+    let b = hallway(true, true);
     let same = a.len() == b.len()
         && a.iter().zip(b.iter()).all(|(x, y)| {
             x.arousal.to_bits() == y.arousal.to_bits()
@@ -232,7 +241,7 @@ fn anchored(steps_from_post: i32, allies: usize, shock: usize) -> Vec<(usize, f6
         let held = s.hold(offered, &tune());
         let strain = fix(b_post, anchor(b_post, held), b_threat, &tune()).strain;
         let impacts: &[Impact] = if t == shock { &[Impact::AllyDeath] } else { &[] };
-        s.tick(strain, impacts, &mut choir, &tune());
+        s.tick(strain, impacts, 0.0, &mut choir, &tune());
         out.push((t, held, strain, s.arousal, s.load, s.numb));
     }
     out
@@ -293,7 +302,7 @@ fn sergeant_drops(steps: i32) -> (usize, f64, f64, f64, bool) {
         let held = s.hold(offered, &tune());
         let strain = fix(b_post, anchor(b_post, held), b_threat, &tune()).strain;
         let ev: &[Impact] = if t == 100 { &[Impact::AllyDeath] } else { &[] };
-        s.tick(strain, ev, &mut choir, &tune());
+        s.tick(strain, ev, 0.0, &mut choir, &tune());
         if s.numb {
             return (promotions, held, strain, t as f64, true);
         }

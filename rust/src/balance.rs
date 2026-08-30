@@ -126,6 +126,8 @@ pub mod soma {
         pub fidelity_half: f64,
         pub fidelity_ceil: f64,
         pub attention_cost: f64,
+        pub tau_concern: f64,
+        pub concern_max: f64,
     }
 
     impl Default for Tuning {
@@ -151,6 +153,8 @@ pub mod soma {
                 fidelity_half: FIDELITY_HALF,
                 fidelity_ceil: FIDELITY_CEIL,
                 attention_cost: ATTENTION_COST,
+                tau_concern: TAU_CONCERN,
+                concern_max: CONCERN_MAX,
             }
         }
     }
@@ -236,4 +240,11 @@ pub mod soma {
     /// never quite gets there, which is why the anchor is never exactly
     /// orthogonal to the world.
     pub const FIDELITY_CEIL: f64 = 0.97;
+
+    /// How long a worry takes to die in a room a man can actually read.
+    /// Where he cannot read the room it does not die at all — that factor
+    /// is what a corridor is worth, and it is worth nothing on its own.
+    pub const TAU_CONCERN: f64 = 25.0;
+    /// A man can only be worried about so much at once.
+    pub const CONCERN_MAX: f64 = 3.0;
 }
