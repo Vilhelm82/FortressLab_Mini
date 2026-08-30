@@ -6,4 +6,5 @@
 pub mod balance;
 pub mod devmap;
 pub mod field;
+pub mod soma;
 pub mod world;

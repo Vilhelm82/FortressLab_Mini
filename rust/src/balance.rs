@@ -91,3 +91,63 @@ pub const LAMBDA_OBS: f64 = 0.3;
 /// The inversion cascade sweeps from the bottom, geometrically.
 pub const HPF_START_HZ: f64 = BASE_HZ;
 pub const HPF_MULT_PER_TICK: f64 = 1.06;
+
+/// Constants of the behavioural substrate. Same warning as the rest of this
+/// file: the orderings are Will's, the numbers are provisional.
+pub mod soma {
+    /// Seconds a tick represents.
+    pub const TICK_SECONDS: f64 = 0.1;
+
+    /// Arousal at which the border is half open.
+    pub const AROUSAL_SCALE: f64 = 2.0;
+    /// Half-life of a fresh spike, seconds.
+    pub const TAU_AROUSAL: f64 = 4.0;
+    /// How much load stretches that half-life. Shaking hands are a longer
+    /// time constant, not a stat.
+    pub const BETA: f64 = 3.0;
+    /// How much load sharpens the response to an event. The battered man
+    /// jumps at timber creaks because his threshold collapsed.
+    pub const KAPPA: f64 = 1.5;
+    /// How much load stiffens the border. Load builds the fence; arousal
+    /// dissolves it. The veteran will not leave his mates.
+    pub const FENCE_LOAD: f64 = 1.0;
+
+    /// Fast into slow.
+    pub const ALPHA: f64 = 0.1;
+    /// Where the latch trips.
+    pub const LOAD_MAX: f64 = 10.0;
+    /// Fraction of the ceiling load must fall back below before the latch
+    /// clears. With no bath it never falls, so the rule rarely fires — the
+    /// physics does the work and this is only the guard.
+    pub const NUMB_CLEAR: f64 = 0.6;
+
+    /// Drain time at the reference choir, seconds.
+    pub const TAU_CHOIR: f64 = 90.0;
+    /// The choir size that drain time refers to.
+    pub const CHOIR_REF: f64 = 8.0;
+    /// Below this the bath is simulated mode by mode and rings.
+    pub const BATH_CAP: usize = 4;
+    /// Centre of the ally mode band, radians per second.
+    pub const BATH_OMEGA: f64 = 0.15;
+    /// Half-width of the band in log space.
+    pub const BATH_LAMBDA: f64 = 0.6;
+    /// How hard load couples into the bath.
+    pub const BATH_COUPLING: f64 = 0.30;
+
+    /// The constant in the fix-strain law, fitted against exact curvature
+    /// across both degenerate strata (2.25x residual, inside the character
+    /// variance the exact constant carries anyway).
+    pub const STRAIN_K: f64 = 8.0;
+    /// Strain in open, well-spread geometry. Only the excess is suspense.
+    pub const STRAIN_REST: f64 = 1.0;
+    /// How hard bad geometry drives arousal, at the limit. Quiet is
+    /// dangerous, but a man's dread is bounded even when his fix is not.
+    pub const SUSPENSE_GAIN: f64 = 0.35;
+    /// Half-point of the dread curve, in log-strain. Strain diverges at a
+    /// degenerate frame; suspense is read off its logarithm, which is the
+    /// scale everything else acoustic is already on.
+    pub const STRAIN_HALF: f64 = 8.0;
+    /// Floor on the determinant so a perfectly degenerate frame is merely
+    /// very bad rather than infinite.
+    pub const DEGENERACY_FLOOR: f64 = 1e-6;
+}
