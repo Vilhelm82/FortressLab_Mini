@@ -416,6 +416,17 @@ and a quiet sector costs no storage at all.
 Nothing anywhere is random — engine accuracy converges rather than scatters,
 and no mechanic rolls dice — so the same trace replays identically, forever.
 
+"Identically" has a floor under it that is this game's to hold, not the
+behavioural model's. `exp`, `ln` and the other transcendentals are not
+required to round the same way on every platform, and only `sqrt` is. A
+trace recorded on a phone can therefore diverge from the same trace replayed
+on a desktop while every rule involved is deterministic — which is a
+property of the ship target, iOS and Android and PC later, and not of any
+mechanic. A consumer that never replays across devices does not care at all.
+So pinning the arithmetic — fixed point, or approximations chosen once and
+carried everywhere — belongs here, at the edge where traces are written and
+read.
+
 One substrate serves three purposes that were otherwise three systems:
 
 | view | what it is |

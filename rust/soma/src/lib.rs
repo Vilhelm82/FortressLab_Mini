@@ -24,11 +24,13 @@
 //! offered as a convenience for games with space in them, and are the only
 //! thing here that assumes any.
 //!
-//! Nothing here rolls dice. Same inputs, same man, every time.
+//! Nothing here rolls dice. Same inputs, same man, every time: a pure
+//! function of what it is handed, with no hidden state.
 //!
-//! DEBT: uses `exp`, `ln`, `cosh` and `sqrt`. Only `sqrt` is required by
-//! IEEE to be identically rounded everywhere, so cross-device replay
-//! identity is not yet guaranteed.
+//! It uses `exp`, `ln` and `sqrt`, and only `sqrt` is required by IEEE to
+//! round identically everywhere. That matters to a consumer that replays
+//! logs across devices and does not matter at all to one that does not, so
+//! whether to pin the maths is the caller's call and not this crate's.
 
 /// Every dialable number, in one place.
 pub mod tuning {
