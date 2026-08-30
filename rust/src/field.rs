@@ -50,6 +50,20 @@ pub fn leader_note(region: i32) -> Note {
     Note::at(Layer::Lead, region.rem_euclid(12))
 }
 
+/// What a company leader sings.
+///
+/// The root is not tied to the ground. A leader carries it, so a company on
+/// the march is its own location and a man in it is as anchored as one
+/// standing on his post — the root and the leader's own octave are five of
+/// the six-odd weight a full chord carries. What he does not have yet is
+/// the specifier: on the road he has purpose without place, and the exact
+/// stone he will stand on arrives when he does.
+///
+/// Men in formation are more confident, and this is why.
+pub fn company_voice(region: i32) -> Vec<Note> {
+    vec![region_root(region), leader_note(region)]
+}
+
 /// An extension: a condition or a tactic layered above the address.
 pub fn extension(region: i32, degree_ix: usize) -> Note {
     Note::at(Layer::Ext, (region + DEGREES[degree_ix]).rem_euclid(12))

@@ -232,3 +232,42 @@ fn a_choir_lets_a_man_survive_a_thinner_hold_on_the_song() {
     assert!(alone > 0.0, "a man on his own must break somewhere");
     assert!(alone > formed, "mates must buy him room, not cost him it");
 }
+
+/// The leader carries the root, so a company is its own location. A man
+/// marching a long way from his post, with his leader beside him, is
+/// anchored about as well as a man standing on the post itself — and far
+/// better than the straggler walking the same road alone.
+#[test]
+fn a_company_on_the_march_carries_its_own_ground() {
+    use fortress_sim::field::company_voice;
+
+    let w = World::new(64, 14, 2);
+    let post = (6, 7, 1);
+    let far = (46, 7, 1);
+    let post_emitter = Emitter::new(post, chord());
+
+    let at_post = {
+        let mut f = Field::new(&w, vec![post_emitter.clone()]);
+        let heard = f.hear((post.0 + 1, post.1, post.2));
+        fidelity(&heard, &chord())
+    };
+    let straggler = {
+        let mut f = Field::new(&w, vec![post_emitter.clone()]);
+        let heard = f.hear(far);
+        fidelity(&heard, &chord())
+    };
+    let marching = {
+        let leader = Emitter::new((far.0 - 1, far.1, far.2), company_voice(0));
+        let mut f = Field::new(&w, vec![post_emitter.clone(), leader]);
+        let heard = f.hear(far);
+        fidelity(&heard, &chord())
+    };
+
+    // The straggler is not destitute: the bass carries, so the root still
+    // reaches him from the post forty cells away and he keeps his region.
+    // What he has lost is the leader's octave and the specifier — whose
+    // voice and which stone. That is the low-pass doing its job.
+    assert!(straggler > 0.0 && straggler < marching, "the leader must anchor the march");
+    assert!(marching > 0.8 * at_post, "and anchor it about as well as the post does");
+    assert!(marching < at_post, "but not better — he still lacks the specifier");
+}
