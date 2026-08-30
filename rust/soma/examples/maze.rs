@@ -35,14 +35,14 @@ struct Row {
     strain: f64,
     arousal: f64,
     load: f64,
-    perm: f64,
+    cost: f64,
     numb: bool,
 }
 
 fn print_rows(rows: &[Row], every: usize) {
     println!(
         "  {:>4}  {:>9}  {:>7}  {:>7}  {:>6}  {:<14} {:<14}",
-        "tick", "concern", "arousal", "load", "perm", "arousal", "load"
+        "tick", "concern", "arousal", "load", "cost", "arousal", "load"
     );
     for r in rows.iter().filter(|r| r.tick % every == 0) {
         println!(
@@ -51,7 +51,7 @@ fn print_rows(rows: &[Row], every: usize) {
             r.concern,
             r.arousal,
             r.load,
-            r.perm,
+            r.cost,
             bar(r.arousal, 6.0, 14),
             bar(r.load, LOAD_MAX, 14),
             if r.numb { "NUMB" } else { "" }
@@ -83,7 +83,7 @@ fn hallway(mate_on_the_walk: bool, alerted: bool) -> Vec<Row> {
         // t=60: word reaches him that something got inside. Nothing else
         // happens until the door goes in at t=160.
         let alert = if alerted && t == 60 { 1.0 } else { 0.0 };
-        let impacts: &[Impact] = if t == 160 { &[Impact::NearMiss] } else { &[] };
+        let impacts: &[Impact] = if t == 160 { &[Impact::new(1.0, 1.0)] } else { &[] };
 
         s.tick(f.strain, impacts, alert, &mut choir, &tune());
         rows.push(Row {
@@ -92,7 +92,7 @@ fn hallway(mate_on_the_walk: bool, alerted: bool) -> Vec<Row> {
             strain: f.strain,
             arousal: s.arousal,
             load: s.load,
-            perm: s.away_cost(&tune()),
+            cost: s.away_cost(&tune()),
             numb: s.numb,
         });
     }
@@ -115,7 +115,7 @@ fn recovery(allies: usize, ticks: usize) -> Vec<Row> {
             strain: STRAIN_REST,
             arousal: s.arousal,
             load: s.load,
-            perm: s.away_cost(&tune()),
+            cost: s.away_cost(&tune()),
             numb: s.numb,
         });
     }

@@ -181,7 +181,7 @@ fn the_same_setup_runs_the_same_way_twice() {
         let mut c = Choir::new(2, &tune());
         (0..400)
             .map(|t| {
-                let ev: &[Impact] = if t == 100 { &[Impact::NearMiss] } else { &[] };
+                let ev: &[Impact] = if t == 100 { &[Impact::new(1.0, 1.0)] } else { &[] };
                 s.tick(strain, ev, 0.0, &mut c, &tune());
                 (s.arousal.to_bits(), s.load.to_bits())
             })

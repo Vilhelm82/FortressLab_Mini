@@ -110,7 +110,7 @@ fn main() {
         if alive && (e - x).abs() <= 0.25 {
             alive = false;
             killed_at = t;
-            hit.push(Impact::KillDelivered);
+            hit.push(Impact::new(0.8, -0.8));
         }
 
         // what he can still hear of his post is his hold on where he is

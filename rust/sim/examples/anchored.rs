@@ -75,7 +75,7 @@ fn anchored(steps_from_post: i32, allies: usize, shock: usize) -> Vec<(usize, f6
     for t in 0..600 {
         let held = s.hold(offered, &tune());
         let strain = fix(b_post, anchor(b_post, held), b_threat, &tune()).strain;
-        let impacts: &[Impact] = if t == shock { &[Impact::AllyDeath] } else { &[] };
+        let impacts: &[Impact] = if t == shock { &[fortress_sim::anchor::ally_death()] } else { &[] };
         s.tick(strain, impacts, 0.0, &mut choir, &tune());
         out.push((t, held, strain, s.arousal, s.load, s.numb));
     }
@@ -136,7 +136,7 @@ fn sergeant_drops(steps: i32) -> (usize, f64, f64, f64, bool) {
         let offered = fidelity(&heard, &wandering.notes, &tune());
         let held = s.hold(offered, &tune());
         let strain = fix(b_post, anchor(b_post, held), b_threat, &tune()).strain;
-        let ev: &[Impact] = if t == 100 { &[Impact::AllyDeath] } else { &[] };
+        let ev: &[Impact] = if t == 100 { &[fortress_sim::anchor::ally_death()] } else { &[] };
         s.tick(strain, ev, 0.0, &mut choir, &tune());
         if s.numb {
             return (promotions, held, strain, t as f64, true);

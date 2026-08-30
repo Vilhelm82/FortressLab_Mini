@@ -52,7 +52,7 @@ fn a_choir_lets_a_man_survive_a_thinner_hold_on_the_song() {
         let mut c = Choir::new(allies, &tune());
         for t in 0..900 {
             let strain = fix(post, anchor(post, s.hold(offered, &tune())), threat, &tune()).strain;
-            let ev: &[Impact] = if t == 100 { &[Impact::AllyDeath] } else { &[] };
+            let ev: &[Impact] = if t == 100 { &[fortress_sim::anchor::ally_death()] } else { &[] };
             // There is a fight going on around him: a standing reason to
             // worry, topped up faster than he can settle it. Without that
             // the geometry is worth nothing and nobody breaks — which is

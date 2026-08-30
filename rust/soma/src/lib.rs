@@ -174,9 +174,9 @@ pub mod tuning {
     /// gain is the same event as the subconscious losing it — this is the
     /// coupling that closes the panic loop.
     pub const ATTENTION_COST: f64 = 0.6;
-    /// Fidelity a man would have with a perfect chord and a clear head. He
-    /// never quite gets there, which is why the anchor is never exactly
-    /// orthogonal to the world.
+    /// The most a man can hold even with a clear head and everything
+    /// telling him where he is. He never quite gets there, which is why
+    /// the anchor is never quite independent of the world.
     pub const FIDELITY_CEIL: f64 = 0.97;
 
     /// How long a worry takes to die in a room a man can actually read.
@@ -382,45 +382,37 @@ pub fn fix(a: Bearing, b: Bearing, c: Bearing, t: &Tuning) -> Fix {
     Refs::from_bearings(&[a, b, c]).fix(t)
 }
 
-/// Things that happen to a man, as opposed to things he is enduring.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum Impact {
-    /// A hostile came inside two cells and left again.
-    NearMiss,
-    /// A man he was singing with went silent within hearing.
-    AllyDeath,
-    /// His own order lost a tier under cancellation.
-    ChordFracture,
-    /// A tick spent at the edge of reach.
-    Melee,
-    /// He won a contact.
-    KillDelivered,
+/// Something that happened to him, as opposed to something he is enduring.
+///
+/// Two numbers, and no idea what the event was. A general model has no
+/// business knowing what a chord is or what a sergeant is — a game names
+/// its own events and says what shape they are.
+///
+/// The two are independent and that independence is the point. A near miss
+/// is a small shock and a large question: the thing that nearly had you is
+/// still out there. Winning a fight is the opposite — a real shock that
+/// ANSWERS one, so its question is negative. Grinding away in contact is
+/// shock with no question at all, because nothing about it is unclear.
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Impact {
+    /// How hard it lands on him now.
+    pub shock: f64,
+    /// How much more reason it gives him to think something is still out
+    /// there. Negative for anything that settles a question.
+    pub question: f64,
 }
 
 impl Impact {
-    pub fn weight(self) -> f64 {
-        match self {
-            Impact::NearMiss => 1.0,
-            Impact::AllyDeath => 2.0,
-            Impact::ChordFracture => 1.5,
-            Impact::Melee => 0.3,
-            Impact::KillDelivered => 0.8,
-        }
+    pub fn new(shock: f64, question: f64) -> Impact {
+        Impact { shock, question }
     }
-
-    /// How much of a reason this is to think something is still out there.
-    ///
-    /// Separate from weight. A near miss is a small shock and a large
-    /// question — the thing that nearly had you is still somewhere. A kill
-    /// delivered is the opposite: a shock that ANSWERS one.
-    pub fn concern(self) -> f64 {
-        match self {
-            Impact::NearMiss => 1.0,
-            Impact::AllyDeath => 1.2,
-            Impact::ChordFracture => 0.6,
-            Impact::Melee => 0.0,
-            Impact::KillDelivered => -0.8,
-        }
+    /// Something happened and told him nothing.
+    pub fn shock(shock: f64) -> Impact {
+        Impact { shock, question: 0.0 }
+    }
+    /// He learned something was out there without being touched by it.
+    pub fn question(question: f64) -> Impact {
+        Impact { shock: 0.0, question }
     }
 }
 
@@ -515,7 +507,7 @@ pub struct Soma {
     /// Something is out there and he has not accounted for it.
     ///
     /// Bad geometry is not itself frightening. A man with nothing on his
-    /// mind can stand in the worst corridor in the castle all night. What
+    /// mind can stand in the least readable place there is all night. What
     /// the corridor does is stop him settling a question he already has —
     /// so dread is concern multiplied by how badly he can resolve it, and
     /// with no concern the geometry is worth nothing at all.
@@ -617,7 +609,7 @@ impl Soma {
     /// The two layers are not halves of a sum, they are stacked: the song
     /// is underneath everything, and how much of it a man is still standing
     /// on depends on what the somatic layer is taking. A frightened man
-    /// hears less of his own chord than a calm one standing in the same
+    /// hears less of what he was given than a calm one standing in the same
     /// cell. That is the loop — losing the song frightens him, and being
     /// frightened costs him more of the song.
     ///
@@ -649,7 +641,7 @@ impl Soma {
 
         // What is out there that he has not accounted for. Alerts and the
         // events that raise questions put it up; a kill answers one.
-        let raised: f64 = alert + impacts.iter().map(|i| i.concern()).sum::<f64>();
+        let raised: f64 = alert + impacts.iter().map(|i| i.question).sum::<f64>();
         // He settles a question at a rate set by how well he can see. In an
         // open room a worry dies on its own; in a corridor it will not, and
         // that is the whole of what the corridor does to him.
@@ -661,7 +653,7 @@ impl Soma {
         // him, not the chronic weight of a bad room. A battered man jumps at
         // timber creaks — a creak is an event. Dread is not.
         let suspense = self.felt(t) * dread(strain, t);
-        let events: f64 = impacts.iter().map(|i| i.weight()).sum();
+        let events: f64 = impacts.iter().map(|i| i.shock).sum();
         let input = suspense + self.sensitivity(t) * events / dt;
 
         let tau = t.tau_arousal * (1.0 + t.beta * self.load / t.load_max);
