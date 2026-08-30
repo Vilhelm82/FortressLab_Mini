@@ -168,4 +168,58 @@ fn main() {
                 && x.strain.to_bits() == y.strain.to_bits()
         });
     println!("  two runs, same setup, bit-for-bit: {}", if same { "identical" } else { "DIVERGED" });
+
+    println!("\n=== THE ANCHOR — hold on the song as the third bearing ===");
+    println!("  a mate is killed at t=100. 600 ticks = 60s.\n");
+    println!("  {:>6} {:>7} {:>6} | {:>7} {:>9} {:>7} {:>7} {:>7}",
+        "steps", "allies", "hold0", "hold@t", "strain@t", "peak A", "load", "state");
+    for (steps, allies) in [(1, 6), (10, 6), (22, 6), (22, 0), (34, 0)] {
+        let r = anchored(steps, allies, 100);
+        let last = r[r.len() - 1];
+        let peak = r.iter().map(|x| x.3).fold(0.0, f64::max);
+        let hold_min = r.iter().map(|x| x.1).fold(f64::MAX, f64::min);
+        println!("  {:>6} {:>7} {:>6.3} | {:>7.3} {:>9.1} {:>7.3} {:>7.3} {:>7}",
+            steps, allies, r[0].1, hold_min, last.2, peak, last.4,
+            if last.5 { "NUMB" } else if last.4 > 5.0 { "wobbly" } else { "held" });
+    }
+}
+
+/// The anchor scenario — the first one driven by the real field.
+///
+/// A tuned post sings. A man stands some distance from it with the same
+/// chord in his head, and what he can still hear of it is his hold on
+/// where he is. That hold is his third bearing. A hostile stands off to
+/// one side. At `shock` a man he was singing with is killed.
+fn anchored(steps_from_post: i32, allies: usize, shock: usize) -> Vec<(usize, f64, f64, f64, f64, bool)> {
+    use fortress_sim::field::{dyad_specifier, leader_note, region_root, Emitter, Field};
+    use fortress_sim::world::World;
+
+    let w = World::new(48, 14, 2);
+    let post_cell = (6, 7, 1);
+    let chord = vec![region_root(0), leader_note(0), dyad_specifier(0, 0)];
+    let post = Emitter::new(post_cell, chord.clone());
+    let hostile = Emitter::new((20, 2, 1), vec![region_root(5)]).away();
+    let mut f = Field::new(&w, vec![post, hostile]);
+
+    let me = (post_cell.0 + steps_from_post, post_cell.1, post_cell.2);
+    let b_post = look(
+        (me.0 as f64, me.1 as f64, me.2 as f64),
+        (post_cell.0 as f64, post_cell.1 as f64, post_cell.2 as f64),
+    );
+    let b_threat = look((me.0 as f64, me.1 as f64, me.2 as f64), (20.0, 2.0, 1.0));
+
+    let heard = f.hear(me);
+    let offered = fidelity(&heard, &chord);
+
+    let mut s = Soma::fresh();
+    let mut choir = Choir::new(allies);
+    let mut out = Vec::new();
+    for t in 0..600 {
+        let held = s.hold(offered);
+        let strain = fix(b_post, anchor(b_post, held), b_threat).strain;
+        let impacts: &[Impact] = if t == shock { &[Impact::AllyDeath] } else { &[] };
+        s.tick(strain, impacts, &mut choir);
+        out.push((t, held, strain, s.arousal, s.load, s.numb));
+    }
+    out
 }

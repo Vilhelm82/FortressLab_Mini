@@ -151,3 +151,84 @@ fn the_same_setup_runs_the_same_way_twice() {
     };
     assert_eq!(go(), go());
 }
+
+// --- the anchor ----------------------------------------------------------
+
+use fortress_sim::field::{dyad_specifier, leader_note, region_root, Emitter, Field};
+use fortress_sim::world::World;
+
+fn chord() -> Vec<fortress_sim::field::Note> {
+    vec![region_root(0), leader_note(0), dyad_specifier(0, 0)]
+}
+
+fn offered_at(steps: i32) -> f64 {
+    let w = World::new(48, 14, 2);
+    let post = (6, 7, 1);
+    let mut f = Field::new(&w, vec![Emitter::new(post, chord())]);
+    let heard = f.hear((post.0 + steps, post.1, post.2));
+    fidelity(&heard, &chord())
+}
+
+#[test]
+fn a_man_at_his_post_hears_more_of_his_own_chord_than_one_far_from_it() {
+    let near = offered_at(1);
+    let far = offered_at(30);
+    assert!(near > far);
+    assert!(near <= 1.0 && far >= 0.0);
+}
+
+#[test]
+fn fright_costs_a_man_the_song() {
+    let calm = Soma { arousal: 0.0, load: 0.0, numb: false };
+    let scared = Soma { arousal: 5.0, load: 0.0, numb: false };
+    let numb = Soma { arousal: 5.0, load: LOAD_MAX, numb: true };
+    assert!(scared.hold(0.8) < calm.hold(0.8));
+    assert_eq!(numb.hold(0.8), 0.0);
+}
+
+#[test]
+fn losing_the_song_lays_the_frame_flat() {
+    let post = b(-1.0, 0.0, 0.0);
+    let threat = b(0.6, -0.8, 0.0);
+    let sure = fix(post, anchor(post, 0.9), threat).strain;
+    let lost = fix(post, anchor(post, 0.02), threat).strain;
+    assert!(lost > sure * 10.0, "a man with no anchor stands in a corridor");
+}
+
+/// The loop: less song makes a man frightened, and being frightened costs
+/// him more song. Whether it runs away depends on what is pushing back.
+///
+/// This pins the ordering, not the threshold. Holding the geometry fixed and
+/// varying only what he can hear, a man with mates around him survives a
+/// thinner hold on the song than a man on his own does — so the choir buys
+/// range, and the two mitigations are separable.
+#[test]
+fn a_choir_lets_a_man_survive_a_thinner_hold_on_the_song() {
+    fn breaks(offered: f64, allies: usize) -> bool {
+        let post = b(-1.0, 0.0, 0.0);
+        let threat = b(0.6, -0.8, 0.0);
+        let mut s = Soma::fresh();
+        let mut c = Choir::new(allies);
+        for t in 0..900 {
+            let strain = fix(post, anchor(post, s.hold(offered)), threat).strain;
+            let ev: &[Impact] = if t == 100 { &[Impact::AllyDeath] } else { &[] };
+            s.tick(strain, ev, &mut c);
+        }
+        s.numb
+    }
+    /// The most song a man can still be holding and break anyway.
+    fn breaking_point(allies: usize) -> f64 {
+        let mut best: f64 = -1.0;
+        for i in 0..=40 {
+            let f = i as f64 / 40.0;
+            if breaks(f, allies) {
+                best = best.max(f);
+            }
+        }
+        best
+    }
+    let alone = breaking_point(0);
+    let formed = breaking_point(6);
+    assert!(alone > 0.0, "a man on his own must break somewhere");
+    assert!(alone > formed, "mates must buy him room, not cost him it");
+}

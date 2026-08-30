@@ -252,6 +252,24 @@ impl Soma {
         (KAPPA * self.load / LOAD_MAX).exp()
     }
 
+    /// What actually reaches him of the fidelity the field is offering.
+    ///
+    /// The two layers are not halves of a sum, they are stacked: the song
+    /// is underneath everything, and how much of it a man is still standing
+    /// on depends on what the somatic layer is taking. A frightened man
+    /// hears less of his own chord than a calm one standing in the same
+    /// cell. That is the loop — losing the song frightens him, and being
+    /// frightened costs him more of the song.
+    ///
+    /// The numb hear none of it at all, which is why they cannot be
+    /// recalled.
+    pub fn hold(&self, offered: f64) -> f64 {
+        if self.numb {
+            return 0.0;
+        }
+        offered / (1.0 + ATTENTION_COST * self.arousal / AROUSAL_SCALE)
+    }
+
     /// One tick.
     ///
     /// `strain` is the fix strain from his three bearings — the suspense of
@@ -284,4 +302,57 @@ impl Soma {
             self.numb = false;
         }
     }
+}
+
+// --- the anchor ----------------------------------------------------------
+
+/// How much of his own song a man can still hear, from nothing to all of it.
+///
+/// This is his intuition and his hold on where he is. The bass carries the
+/// situational awareness — which region is mine, whose voice do I follow,
+/// am I standing where I was put — so depth is authority here exactly as it
+/// is in propagation. A man at his post hears his chord come back rich, and
+/// that richness IS the confirmation of purpose: he knows what to do, where
+/// to stand, and who to listen to.
+///
+/// Hearing a note at all is most of its value; hearing it loudly adds
+/// little. Losing it entirely is what costs.
+pub fn fidelity(heard: &[(crate::field::Note, f64)], ordered: &[crate::field::Note]) -> f64 {
+    let mut want = 0.0;
+    let mut got = 0.0;
+    for n in ordered {
+        let w = n.layer.weight();
+        want += w;
+        if let Some((_, a)) = heard.iter().find(|(m, _)| m.same(n)) {
+            let a = a.abs();
+            got += w * (a / (a + FIDELITY_HALF));
+        }
+    }
+    if want <= 0.0 {
+        0.0
+    } else {
+        FIDELITY_CEIL * (got / want)
+    }
+}
+
+/// The anchor as a bearing.
+///
+/// The two worldly bearings span the ground a man is standing on. His hold
+/// on the song is what gives him a third direction to reference against —
+/// so it enters the frame lifted out of that plane by exactly its fidelity.
+/// At full fidelity the anchor is independent of everything around him and
+/// the frame is wide open. At zero it lies down flat with the rest and the
+/// frame is singular, which is the same collapse a corridor causes.
+///
+/// CLAUDE'S CONSTRUCTION: a scalar needs a direction before it can be an
+/// axis, and the one chosen here is fictitious. Only angles enter the Gram,
+/// so any fixed direction independent of the ground gives identical numbers.
+pub fn anchor(toward: Bearing, fidelity: f64) -> Bearing {
+    let f = fidelity.clamp(0.0, 1.0);
+    let flat = (1.0 - f * f).sqrt();
+    let n = (toward[0] * toward[0] + toward[1] * toward[1]).sqrt();
+    if n < 1e-12 {
+        return [0.0, 0.0, 1.0];
+    }
+    [flat * toward[0] / n, flat * toward[1] / n, f]
 }

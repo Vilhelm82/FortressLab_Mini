@@ -150,4 +150,16 @@ pub mod soma {
     /// Floor on the determinant so a perfectly degenerate frame is merely
     /// very bad rather than infinite.
     pub const DEGENERACY_FLOOR: f64 = 1e-6;
+
+    /// Amplitude at which a band counts half toward fidelity. Hearing a
+    /// note at all is most of the value; hearing it loudly adds little.
+    pub const FIDELITY_HALF: f64 = 0.5;
+    /// How much arousal costs a man of the song. The somatic layer taking
+    /// gain is the same event as the subconscious losing it — this is the
+    /// coupling that closes the panic loop.
+    pub const ATTENTION_COST: f64 = 0.6;
+    /// Fidelity a man would have with a perfect chord and a clear head. He
+    /// never quite gets there, which is why the anchor is never exactly
+    /// orthogonal to the world.
+    pub const FIDELITY_CEIL: f64 = 0.97;
 }
