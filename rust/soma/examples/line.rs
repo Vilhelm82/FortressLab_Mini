@@ -75,6 +75,8 @@ fn main() {
     let mut choir = Choir::new(6, &tune());
     let mut x: f64 = 0.0;
     let speed = 0.06;
+    let mut alive = true;
+    let mut killed_at = 0usize;
 
     println!("=== A MAN, HIS POST, AND SOMETHING COMING AT HIM ===");
     println!("  soma supplies one number: what being away costs him.");
@@ -83,16 +85,33 @@ fn main() {
         "t", "enemy", "cost", "border", "man", "arousal");
 
     for t in 0..1000 {
-        let e = enemy_at(t);
+        let e = if alive { enemy_at(t) } else { f64::INFINITY };
 
         // his side: what it costs him to be away, from soma alone
         let cost = m.away_cost(&tune());
         let border = w.border(e, cost);
 
-        // the caller decides what to do with that. He closes on what is
-        // cutting across his song, and never past his own border.
-        let want = if (e - x).abs() > 1.0 { x + (e - x).signum() * speed } else { x };
-        x = want.clamp(-border.abs().max(0.0), border);
+        // The caller decides what to do with that. He closes on what is
+        // cutting across his song — all the way, because every unit is
+        // already violence and nothing tells a man not to kill. The border
+        // is the only thing that stops him, and it stops him by being where
+        // he may be, not by telling him to hold off.
+        if alive {
+            x = (x + (e - x).signum() * speed).clamp(-border.abs(), border);
+        } else {
+            // Nothing left drawing him. He goes home, because his post is
+            // the only thing still singing.
+            x += (0.0 - x).signum() * speed.min(x.abs());
+        }
+
+        // Contact. Nothing here tells him to hold off, so reaching the man
+        // IS the fight.
+        let mut hit: Vec<Impact> = Vec::new();
+        if alive && (e - x).abs() <= 0.25 {
+            alive = false;
+            killed_at = t;
+            hit.push(Impact::KillDelivered);
+        }
 
         // what he can still hear of his post is his hold on where he is
         let held = m.hold(w.belonging(x), &tune());
@@ -104,12 +123,24 @@ fn main() {
         // place it. A man looking straight at the thing has a target, not a
         // question — so what winds him up is being far enough out that his
         // own post has stopped telling him where he is.
-        let alert = w.interference(x, e) * m.unresolved(strain, &tune()) * 0.04;
-        m.tick(strain, &[], alert, &mut choir, &tune());
+        let alert = if alive {
+            w.interference(x, e) * m.unresolved(strain, &tune()) * 0.04
+        } else {
+            0.0
+        };
+        m.tick(strain, &hit, alert, &mut choir, &tune());
 
-        if t % 100 == 0 || t == 999 {
-            println!("  {:>5} {:>7.2} {:>8.3} {:>8.3} {:>8.3} {:>8.3}",
-                t, e, cost, border, x, m.arousal);
+        if t % 100 == 0 || t == 999 || t == killed_at && killed_at > 0 {
+            println!("  {:>5} {:>7} {:>8.3} {:>8.3} {:>8.3} {:>8.3}  {}",
+                t,
+                if alive { format!("{e:.2}") } else { "—".into() },
+                cost, border, x, m.arousal,
+                if t == killed_at && killed_at > 0 { "CONTACT" } else { "" });
         }
     }
+    println!("\n  ended at {:.3}, {} his post. concern {:.3}, load {:.3}{}",
+        x,
+        if x.abs() < 0.5 { "back at" } else { "away from" },
+        m.concern, m.load,
+        if m.numb { ", NUMB" } else { "" });
 }
