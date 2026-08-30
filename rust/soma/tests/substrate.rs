@@ -273,3 +273,66 @@ fn the_anchor_generalises_to_one_more_reference() {
     assert_eq!(sure.n(), 3);
     assert!(lost.fix(&tune()).strain > sure.fix(&tune()).strain * 10.0);
 }
+
+/// The border is a threshold, not a throttle.
+///
+/// A composed man does not creep slowly to the same place a frightened one
+/// runs to — he stops somewhere nearer and stays there. Caught on a number
+/// line, where the old cosine-gain form had every man converging on the
+/// world's own force balance and composure only changing the arrival time.
+#[test]
+fn where_a_man_stops_is_set_by_his_confidence_not_by_the_world() {
+    // A man on a line. Something holds him at 0, something draws him from
+    // out at 12, and the draw weakens as he closes — so with no border left
+    // the world balances him at 1.2/0.35. He is told at t=200 that
+    // something is out there, and it is not a thing he can settle.
+    let mut s = Soma::fresh();
+    let mut c = Choir::new(0, &tune());
+    let mut x: f64 = 0.0;
+    let mut step = vec![0.0f64; 0];
+
+    for t in 0..1500 {
+        let held = s.hold((-(x.abs()) / 6.0).exp(), &tune());
+        let mut r = Refs::new(2);
+        r.set(0, 1, -1.0); // post behind him, the thing ahead: opposed
+        let strain = r.with_anchor(held, 0).fix(&tune()).strain;
+        s.tick(strain, &[], if t == 200 { 3.0 } else { 0.0 }, &mut c, &tune());
+        let d = s.crossing(1.2 - 0.35 * x, &tune()) * TICK_SECONDS;
+        x += d;
+        step.push(d);
+    }
+
+    // The claim is that leaving is a MOMENT, not a slope. So: of all the
+    // ground he covers in twenty-five minutes, more than half of it must be
+    // covered inside one short burst. A man who drifts cannot do that — any
+    // hundred ticks of a smooth walk carry about a fifteenth of the trip.
+    //
+    // Deliberately says nothing about WHEN, or about any constant, so the
+    // sweep can move every knob it likes and this still means what it says.
+    let window = 100;
+    let total = x;
+    let mut busiest: f64 = 0.0;
+    for w in step.windows(window) {
+        busiest = busiest.max(w.iter().sum::<f64>());
+    }
+    assert!(total > 3.0, "he has to actually go somewhere");
+    assert!(
+        busiest > 0.5 * total,
+        "the break must be a moment: {busiest:.3} of {total:.3} in {window} ticks"
+    );
+
+    // And he must have spent most of the run not going anywhere, or a
+    // "burst" is just what a short trip looks like.
+    //
+    // Measured against his own top speed, not an absolute epsilon: a man
+    // parked at his fence is asymptotically approaching it, so his steps
+    // are tiny forever rather than exactly zero. That is arithmetic, not
+    // fidgeting.
+    let top = step.iter().fold(0.0f64, |m, d| m.max(d.abs()));
+    let still = step.iter().filter(|d| d.abs() < 0.01 * top).count();
+    assert!(
+        still > step.len() / 2,
+        "most of his day should be standing still: {still} of {} ticks",
+        step.len()
+    );
+}

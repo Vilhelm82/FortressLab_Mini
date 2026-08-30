@@ -60,6 +60,7 @@ pub mod tuning {
         pub fidelity_half: f64,
         pub fidelity_ceil: f64,
         pub attention_cost: f64,
+        pub border_resist: f64,
         pub tau_concern: f64,
         pub concern_max: f64,
     }
@@ -87,6 +88,7 @@ pub mod tuning {
                 fidelity_half: FIDELITY_HALF,
                 fidelity_ceil: FIDELITY_CEIL,
                 attention_cost: ATTENTION_COST,
+                border_resist: BORDER_RESIST,
                 tau_concern: TAU_CONCERN,
                 concern_max: CONCERN_MAX,
             }
@@ -174,6 +176,11 @@ pub mod tuning {
     /// never quite gets there, which is why the anchor is never exactly
     /// orthogonal to the world.
     pub const FIDELITY_CEIL: f64 = 0.97;
+
+    /// How much pull a man's intact border refuses outright. Below this he
+    /// does not move at all; above it he acts on the excess. It is what
+    /// makes the border a place he stops rather than a speed he goes.
+    pub const BORDER_RESIST: f64 = 1.0;
 
     /// How long a worry takes to die in a room a man can actually read.
     /// Where he cannot read the room it does not die at all — that factor
@@ -571,11 +578,26 @@ impl Soma {
         HALF_PI * sech(self.arousal / (t.arousal_scale * stiffen))
     }
 
-    /// What he does with a net outward pull. The border is not a wall and
-    /// not a door; `cos` of the permeability is the share of the pull that
-    /// becomes movement, and the rest is refusal.
+    /// What he does with a net pull on him.
+    ///
+    /// The border is a threshold, not a throttle. He acts on whatever part
+    /// of the pull is bigger than his own resistance to leaving, and on
+    /// none of it below that — so a man whose border holds does not creep
+    /// slowly toward the same place a frightened man runs to. He stays,
+    /// and where he stops is set by his confidence rather than by where
+    /// the world's forces happen to balance.
+    ///
+    /// A number line caught this. Under the old form — a cosine gain on
+    /// the pull — every man converged on the same point and composure only
+    /// changed the arrival time, which is not a question being weighed.
     pub fn crossing(&self, pull: f64, t: &Tuning) -> f64 {
-        self.permeability(t).cos() * pull
+        let resist = t.border_resist * self.permeability(t).sin();
+        let over = pull.abs() - resist;
+        if over <= 0.0 {
+            0.0
+        } else {
+            over.copysign(pull)
+        }
     }
 
     /// How much a given event lands on him. The battered man's threshold
