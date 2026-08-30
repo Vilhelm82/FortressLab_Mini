@@ -60,7 +60,6 @@ pub mod tuning {
         pub fidelity_half: f64,
         pub fidelity_ceil: f64,
         pub attention_cost: f64,
-        pub border_resist: f64,
         pub tau_concern: f64,
         pub concern_max: f64,
     }
@@ -88,7 +87,6 @@ pub mod tuning {
                 fidelity_half: FIDELITY_HALF,
                 fidelity_ceil: FIDELITY_CEIL,
                 attention_cost: ATTENTION_COST,
-                border_resist: BORDER_RESIST,
                 tau_concern: TAU_CONCERN,
                 concern_max: CONCERN_MAX,
             }
@@ -177,11 +175,6 @@ pub mod tuning {
     /// orthogonal to the world.
     pub const FIDELITY_CEIL: f64 = 0.97;
 
-    /// How much pull a man's intact border refuses outright. Below this he
-    /// does not move at all; above it he acts on the excess. It is what
-    /// makes the border a place he stops rather than a speed he goes.
-    pub const BORDER_RESIST: f64 = 1.0;
-
     /// How long a worry takes to die in a room a man can actually read.
     /// Where he cannot read the room it does not die at all — that factor
     /// is what a corridor is worth, and it is worth nothing on its own.
@@ -192,7 +185,6 @@ pub mod tuning {
 
 pub use tuning::*;
 
-const HALF_PI: f64 = std::f64::consts::FRAC_PI_2;
 
 /// A bearing from a man to something he is keeping track of. Unit length.
 pub type Bearing = [f64; 3];
@@ -530,9 +522,6 @@ impl Default for Soma {
     }
 }
 
-fn sech(x: f64) -> f64 {
-    2.0 / (x.exp() + (-x).exp())
-}
 
 /// How much a bad fix weighs on a man.
 ///
@@ -560,44 +549,33 @@ impl Soma {
         dread(strain, t) / t.suspense_gain
     }
 
-    /// How permeable his border is, in radians.
+    /// What being away from where he belongs costs him, right now.
     ///
-    /// `PI/2` is a border that holds: he weighs the crossing and stays where
-    /// he is, whatever the pull. `0` is no border at all — he goes, post and
-    /// mates be damned. Between the two he leaks across it, re-weighing
-    /// every step, which is the weaving and the feinting and the hesitation.
+    /// This is ONE SIDE of a comparison the caller resolves, and the only
+    /// side soma is entitled to an opinion about. The other side is how
+    /// strongly he belongs where he is standing, plus whatever is out there
+    /// drawing him — both of which are the game's, and both of which have
+    /// units and distances in them that this crate must never learn.
     ///
-    /// Load stiffens it and arousal dissolves it. The battered veteran needs
-    /// a bigger fright than the fresh boy to leave his mates — and startles
-    /// at more, which is a different quantity and pulls the other way.
-    pub fn permeability(&self, t: &Tuning) -> f64 {
+    /// The border is wherever those two are equal. It is not a radius and
+    /// not a threshold he crosses: it is a level set of his own sense of
+    /// belonging, so its shape is the shape of whatever carries that. A man
+    /// does not leave his post because he is frightened — something comes
+    /// at him, his confidence in defending reaches out to meet it, and the
+    /// border goes with it. When the thing breaks off, the border contracts
+    /// under him and he turns back at the moment being out there costs more
+    /// than the chase is worth. No chase rule, no leash length, no timer.
+    ///
+    /// Load raises the cost and arousal lowers it — the fence built by what
+    /// the day took out of him, dissolved by the fright in front of him.
+    /// The numb pay nothing, which is why nothing brings them back.
+    pub fn away_cost(&self, t: &Tuning) -> f64 {
         if self.numb {
             return 0.0;
         }
-        let stiffen = 1.0 + t.fence_load * (self.load / t.load_max);
-        HALF_PI * sech(self.arousal / (t.arousal_scale * stiffen))
-    }
-
-    /// What he does with a net pull on him.
-    ///
-    /// The border is a threshold, not a throttle. He acts on whatever part
-    /// of the pull is bigger than his own resistance to leaving, and on
-    /// none of it below that — so a man whose border holds does not creep
-    /// slowly toward the same place a frightened man runs to. He stays,
-    /// and where he stops is set by his confidence rather than by where
-    /// the world's forces happen to balance.
-    ///
-    /// A number line caught this. Under the old form — a cosine gain on
-    /// the pull — every man converged on the same point and composure only
-    /// changed the arrival time, which is not a question being weighed.
-    pub fn crossing(&self, pull: f64, t: &Tuning) -> f64 {
-        let resist = t.border_resist * self.permeability(t).sin();
-        let over = pull.abs() - resist;
-        if over <= 0.0 {
-            0.0
-        } else {
-            over.copysign(pull)
-        }
+        let built = 1.0 + t.fence_load * (self.load / t.load_max);
+        let dissolved = 1.0 + self.arousal / t.arousal_scale;
+        built / dissolved
     }
 
     /// How much a given event lands on him. The battered man's threshold

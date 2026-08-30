@@ -103,16 +103,19 @@ fn arousal_opens_the_border_and_load_stiffens_it() {
     let calm = Soma { arousal: 0.0, load: 0.0, concern: 0.0, numb: false };
     let scared = Soma { arousal: 4.0, load: 0.0, concern: 0.0, numb: false };
     let scared_and_battered = Soma { arousal: 4.0, load: 8.0, concern: 0.0, numb: false };
-    assert!(scared.permeability(&tune()) < calm.permeability(&tune()));
-    assert!(scared_and_battered.permeability(&tune()) > scared.permeability(&tune()));
+    // Arousal makes being away cheap; load makes it dear. The frightened
+    // man's border reaches further out, the battered one's pulls back in.
+    assert!(scared.away_cost(&tune()) < calm.away_cost(&tune()));
+    assert!(scared_and_battered.away_cost(&tune()) > scared.away_cost(&tune()));
 }
-
+/// A man who has nothing left to lose pays nothing to be anywhere, which
+/// is why nothing brings him back.
 #[test]
-fn a_border_that_holds_lets_nothing_through_and_no_border_lets_everything() {
+fn the_numb_pay_nothing_to_be_anywhere() {
     let calm = Soma { arousal: 0.0, load: 0.0, concern: 0.0, numb: false };
     let numb = Soma { arousal: 0.0, load: LOAD_MAX, concern: 0.0, numb: true };
-    assert!(calm.crossing(1.0, &tune()).abs() < 1e-12);
-    assert!((numb.crossing(1.0, &tune()) - 1.0).abs() < 1e-12);
+    assert!(calm.away_cost(&tune()) > 0.0);
+    assert_eq!(numb.away_cost(&tune()), 0.0);
 }
 
 #[test]
@@ -274,65 +277,44 @@ fn the_anchor_generalises_to_one_more_reference() {
     assert!(lost.fix(&tune()).strain > sure.fix(&tune()).strain * 10.0);
 }
 
-/// The border is a threshold, not a throttle.
+/// The border is a MAXIMUM, not a gate he pushes through.
 ///
-/// A composed man does not creep slowly to the same place a frightened one
-/// runs to — he stops somewhere nearer and stays there. Caught on a number
-/// line, where the old cosine-gain form had every man converging on the
-/// world's own force balance and composure only changing the arrival time.
+/// soma has no opinion about motion at all now — it says what being away
+/// costs, the caller says how strongly he belongs where he is standing and
+/// what is drawing him out, and the border is where those meet. So the only
+/// thing to pin here is that the cost moves the right way, because the
+/// caller does everything else.
 #[test]
-fn where_a_man_stops_is_set_by_his_confidence_not_by_the_world() {
-    // A man on a line. Something holds him at 0, something draws him from
-    // out at 12, and the draw weakens as he closes — so with no border left
-    // the world balances him at 1.2/0.35. He is told at t=200 that
-    // something is out there, and it is not a thing he can settle.
-    let mut s = Soma::fresh();
-    let mut c = Choir::new(0, &tune());
-    let mut x: f64 = 0.0;
-    let mut step = vec![0.0f64; 0];
+fn what_being_away_costs_moves_the_way_the_rulings_say() {
+    let calm = Soma { arousal: 0.0, load: 0.0, concern: 0.0, numb: false };
+    let frightened = Soma { arousal: 6.0, load: 0.0, concern: 1.0, numb: false };
+    let battered = Soma { arousal: 0.0, load: 8.0, concern: 0.0, numb: false };
+    let both = Soma { arousal: 6.0, load: 8.0, concern: 1.0, numb: false };
 
-    for t in 0..1500 {
-        let held = s.hold((-(x.abs()) / 6.0).exp(), &tune());
-        let mut r = Refs::new(2);
-        r.set(0, 1, -1.0); // post behind him, the thing ahead: opposed
-        let strain = r.with_anchor(held, 0).fix(&tune()).strain;
-        s.tick(strain, &[], if t == 200 { 3.0 } else { 0.0 }, &mut c, &tune());
-        let d = s.crossing(1.2 - 0.35 * x, &tune()) * TICK_SECONDS;
-        x += d;
-        step.push(d);
-    }
+    assert!(frightened.away_cost(&tune()) < calm.away_cost(&tune()),
+        "arousal dissolves the fence, so being away gets cheaper");
+    assert!(battered.away_cost(&tune()) > calm.away_cost(&tune()),
+        "load builds the fence, so being away gets dearer");
+    assert!(both.away_cost(&tune()) > frightened.away_cost(&tune()),
+        "the battered man will not go as far as the fresh one on the same fright");
+    assert!(calm.away_cost(&tune()) > 0.0);
+}
 
-    // The claim is that leaving is a MOMENT, not a slope. So: of all the
-    // ground he covers in twenty-five minutes, more than half of it must be
-    // covered inside one short burst. A man who drifts cannot do that — any
-    // hundred ticks of a smooth walk carry about a fifteenth of the trip.
-    //
-    // Deliberately says nothing about WHEN, or about any constant, so the
-    // sweep can move every knob it likes and this still means what it says.
-    let window = 100;
-    let total = x;
-    let mut busiest: f64 = 0.0;
-    for w in step.windows(window) {
-        busiest = busiest.max(w.iter().sum::<f64>());
-    }
-    assert!(total > 3.0, "he has to actually go somewhere");
-    assert!(
-        busiest > 0.5 * total,
-        "the break must be a moment: {busiest:.3} of {total:.3} in {window} ticks"
-    );
-
-    // And he must have spent most of the run not going anywhere, or a
-    // "burst" is just what a short trip looks like.
-    //
-    // Measured against his own top speed, not an absolute epsilon: a man
-    // parked at his fence is asymptotically approaching it, so his steps
-    // are tiny forever rather than exactly zero. That is arithmetic, not
-    // fidgeting.
-    let top = step.iter().fold(0.0f64, |m, d| m.max(d.abs()));
-    let still = step.iter().filter(|d| d.abs() < 0.01 * top).count();
-    assert!(
-        still > step.len() / 2,
-        "most of his day should be standing still: {still} of {} ticks",
-        step.len()
-    );
+/// A level set is not a radius. Given the same man, a field that carries
+/// further puts his border further out — so in a game the shape of the
+/// border is the shape of whatever carries his sense of belonging, and
+/// nobody authors it.
+#[test]
+fn the_border_takes_the_shape_of_whatever_carries_belonging() {
+    let man = Soma { arousal: 1.0, load: 0.0, concern: 1.0, numb: false };
+    let cost = man.away_cost(&tune());
+    let reach = |carry: f64| {
+        let mut x = 0.0f64;
+        while (-(x + 0.01) / carry).exp() >= cost && x < 100.0 {
+            x += 0.01;
+        }
+        x
+    };
+    assert!(reach(6.0) > reach(3.0), "a field that carries further reaches further");
+    assert!(reach(3.0) > 0.0);
 }

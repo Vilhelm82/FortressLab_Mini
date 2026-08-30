@@ -92,7 +92,7 @@ fn hallway(mate_on_the_walk: bool, alerted: bool) -> Vec<Row> {
             strain: f.strain,
             arousal: s.arousal,
             load: s.load,
-            perm: s.permeability(&tune()),
+            perm: s.away_cost(&tune()),
             numb: s.numb,
         });
     }
@@ -115,7 +115,7 @@ fn recovery(allies: usize, ticks: usize) -> Vec<Row> {
             strain: STRAIN_REST,
             arousal: s.arousal,
             load: s.load,
-            perm: s.permeability(&tune()),
+            perm: s.away_cost(&tune()),
             numb: s.numb,
         });
     }
