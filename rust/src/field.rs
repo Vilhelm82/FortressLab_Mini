@@ -31,6 +31,15 @@ impl Note {
     pub fn same(&self, other: &Note) -> bool {
         self.layer == other.layer && (self.hz - other.hz).abs() < 1e-9
     }
+    /// Which of the twelve this note is, recovered from its pitch.
+    pub fn semitone(&self) -> i32 {
+        let r = self.hz / (BASE_HZ * self.layer.octave());
+        (r.ln() / SEMI.ln()).round() as i32
+    }
+    /// The same pitch class, voiced in another octave of the stack.
+    pub fn revoiced(&self, layer: Layer) -> Note {
+        Note::at(layer, self.semitone())
+    }
 }
 
 /// The region's fundamental. Twelve of them, one per addressable region.
@@ -414,6 +423,20 @@ fn world_band(world: &World, src: Cell, layer: Layer) -> HashMap<Cell, f64> {
 /// each time it eats his root the next note shifts into the root slot.
 /// The same operation a messenger runs on arrival — the root slot is a
 /// cursor, advanced by decay or by progress.
+///
+/// When the leader dies the post's own root becomes audible again, because
+/// the ground was always singing it. If the company is too far off for that
+/// to carry, the filter eats the root anyway and the dyad is promoted —
+/// *fuck this, let's just go there instead*. The new root names a place, so
+/// they commit to it. Take too long reaching it and the filter eats that
+/// one too, and the next, and so on down.
+///
+/// The end of the line is a bare root, and a bare root is an area rather
+/// than a destination — men who know only their region and cannot path to
+/// anything in it. How many re-targetings a company gets before that is
+/// simply how complex its orders were: a four-note chord is a post and two
+/// extensions, so three cascades. **Order complexity is how long a company
+/// survives losing its sergeant.**
 pub struct Wandering {
     pub notes: Vec<Note>,
     pub hpf: f64,
@@ -427,10 +450,64 @@ impl Wandering {
     pub fn root(&self) -> Option<Note> {
         self.notes.first().copied()
     }
+    /// How many more times this man can be re-aimed before he is left with
+    /// nothing but an area.
+    pub fn cascades_remaining(&self) -> usize {
+        self.notes.len().saturating_sub(1)
+    }
+    /// Down to a bare root: he still knows his region and can no longer be
+    /// sent anywhere in it.
+    pub fn dissolved(&self) -> bool {
+        self.notes.len() <= 1
+    }
     /// Decay: the filter climbs and the current root falls away.
+    ///
+    /// It stops at one. The bottom of the cascade is a bare root — an area,
+    /// men who know their region and can be sent nowhere in it — and not
+    /// silence. Decay cannot take a man's last note; only arrival can, and
+    /// that is a circuit completed rather than a company coming apart.
     pub fn tick_filter(&mut self) {
         self.hpf *= HPF_MULT_PER_TICK;
+        if self.notes.len() <= 1 {
+            return;
+        }
+        let before = self.notes.len();
+        let highest = *self.notes.last().unwrap();
         self.notes.retain(|n| n.hz >= self.hpf);
+        if self.notes.is_empty() {
+            self.notes.push(highest);
+        }
+        if self.notes.len() < before {
+            self.revoice();
+            self.hpf = HPF_START_HZ;
+        }
+    }
+
+    /// A cascade drops what is left into the right octaves.
+    ///
+    /// The promoted note does not merely take the root slot, it takes the
+    /// root's register — and so its decay, its weight, and its passage
+    /// through stone. That is what makes a re-aimed company able to hear
+    /// where it is now going: the new root carries because it is a root.
+    /// The rest of the chord falls in behind it and the stack keeps its
+    /// shape.
+    ///
+    /// The sweep restarts from the bottom, so each re-aiming buys a full
+    /// cycle before the next one.
+    ///
+    /// CLAUDE'S READING of "drops the notes to the right octave": every
+    /// surviving note is revoiced by its new position, not just the new
+    /// root. If only the root was meant to drop, this is the line.
+    fn revoice(&mut self) {
+        for (i, n) in self.notes.iter_mut().enumerate() {
+            let layer = match i {
+                0 => Layer::Loc,
+                1 => Layer::Spec,
+                _ => Layer::Ext,
+            };
+            *n = n.revoiced(layer);
+        }
+        self.notes.sort_by(|a, b| a.hz.total_cmp(&b.hz));
     }
     /// Progress: a messenger reaching a checkpoint drops his current root and
     /// the next stop becomes it.

@@ -342,6 +342,19 @@ the current root the next note shifts into the root slot** — the dyad becomes
 the root, then an extension, and so on. With only a root left, a man seeks the
 strongest signal matching it.
 
+It is an **inversion**: the promoted note is re-voiced into the root octave,
+not merely moved to the front of a list. It therefore takes the root's weight,
+the root's decay and the root's passage through stone. This is what makes the
+re-aiming a decision rather than a gesture — a company that has just settled
+on somewhere new can actually hear it from where it is standing, which a note
+left in the specifier octave could not manage past a few cells or any stone at
+all. The filter restarts from the bottom after each inversion, so every
+re-aiming buys a full cycle.
+
+Decay stops at one note. The bottom of the cascade is a bare root — an area
+rather than a destination — and never silence. Only arrival empties a stack,
+because a finished circuit is not a company coming apart.
+
 Since extensions exist at every location, the unique root-and-dyad pair is the
 barrier a man must cross to join another company. A degraded man therefore
 drifts toward matching roles, not random ones.

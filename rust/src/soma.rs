@@ -280,9 +280,12 @@ impl Soma {
     pub fn tick(&mut self, strain: f64, impacts: &[Impact], choir: &mut Choir) {
         let dt = TICK_SECONDS;
 
+        // Sensitisation is a startle threshold: it sharpens what HAPPENS to
+        // him, not the chronic weight of a bad room. A battered man jumps at
+        // timber creaks — a creak is an event. Dread is not.
         let suspense = dread(strain);
         let events: f64 = impacts.iter().map(|i| i.weight()).sum();
-        let input = self.sensitivity() * (suspense + events / dt);
+        let input = suspense + self.sensitivity() * events / dt;
 
         let tau = TAU_AROUSAL * (1.0 + BETA * self.load / LOAD_MAX);
         self.arousal += dt * (input - self.arousal / tau);

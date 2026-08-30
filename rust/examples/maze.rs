@@ -182,6 +182,17 @@ fn main() {
             steps, allies, r[0].1, hold_min, last.2, peak, last.4,
             if last.5 { "NUMB" } else if last.4 > 5.0 { "wobbly" } else { "held" });
     }
+
+    println!("\n=== THE SERGEANT DROPS — four-note orders, killed at t=100 ===");
+    println!("  {:>6} {:>11} {:>7} {:>8} {:>7} {:>8}",
+        "steps", "re-aimings", "hold", "strain", "broke@s", "state");
+    for steps in [2, 8, 16, 28, 40] {
+        let (promotions, held, strain, broke_at, numb) = sergeant_drops(steps);
+        println!("  {:>6} {:>11} {:>7.3} {:>8.1} {:>7} {:>8}",
+            steps, promotions, held, strain,
+            if broke_at.is_finite() { format!("{:.0}", broke_at / 10.0) } else { "—".into() },
+            if numb { "NUMB" } else { "held" });
+    }
 }
 
 /// The anchor scenario — the first one driven by the real field.
@@ -222,4 +233,67 @@ fn anchored(steps_from_post: i32, allies: usize, shock: usize) -> Vec<(usize, f6
         out.push((t, held, strain, s.arousal, s.load, s.numb));
     }
     out
+}
+
+/// The sergeant drops.
+///
+/// A company stands `steps` from its post with orders four notes deep. At
+/// t=100 the leader is killed: his voice stops, the post's own root becomes
+/// audible again if it carries that far, and the rising filter starts
+/// eating. Each time it takes a root the next note is promoted and the men
+/// re-aim at it.
+fn sergeant_drops(steps: i32) -> (usize, f64, f64, f64, bool) {
+    use fortress_sim::field::{
+        company_voice, dyad_specifier, extension, region_root, Emitter, Field, Wandering,
+    };
+    use fortress_sim::world::World;
+
+    let w = World::new(64, 14, 2);
+    let post_cell = (6, 7, 1);
+    let orders = vec![
+        region_root(0),
+        dyad_specifier(0, 0),
+        extension(0, 1),
+        extension(0, 3),
+    ];
+    let me = (post_cell.0 + steps, post_cell.1, post_cell.2);
+    let post = Emitter::new(post_cell, orders.clone());
+    let leader = Emitter::new((me.0 - 1, me.1, me.2), company_voice(0));
+
+    let mut with_him = Field::new(&w, vec![post.clone(), leader]);
+    let mut without = Field::new(&w, vec![post]);
+
+    let b_post = look(
+        (me.0 as f64, me.1 as f64, me.2 as f64),
+        (post_cell.0 as f64, post_cell.1 as f64, post_cell.2 as f64),
+    );
+    let b_threat = look((me.0 as f64, me.1 as f64, me.2 as f64), (30.0, 2.0, 1.0));
+
+    let mut s = Soma::fresh();
+    let mut choir = Choir::new(6);
+    let mut wandering = Wandering::new(orders);
+    let mut promotions = 0usize;
+    let mut root = wandering.root().unwrap();
+
+    for t in 0..900 {
+        let heard = if t < 100 { with_him.hear(me) } else { without.hear(me) };
+        if t >= 100 {
+            wandering.tick_filter();
+            if let Some(n) = wandering.root() {
+                if !n.same(&root) {
+                    promotions += 1;
+                    root = n;
+                }
+            }
+        }
+        let offered = fidelity(&heard, &wandering.notes);
+        let held = s.hold(offered);
+        let strain = fix(b_post, anchor(b_post, held), b_threat).strain;
+        let ev: &[Impact] = if t == 100 { &[Impact::AllyDeath] } else { &[] };
+        s.tick(strain, ev, &mut choir);
+        if s.numb {
+            return (promotions, held, strain, t as f64, true);
+        }
+    }
+    (promotions, s.hold(fidelity(&without.hear(me), &wandering.notes)), 0.0, f64::INFINITY, false)
 }

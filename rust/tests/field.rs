@@ -285,20 +285,27 @@ fn the_filter_shifts_the_next_note_into_the_root_slot() {
         dyad_specifier(4, 1),
         extension(4, 3),
     ]);
-    assert_eq!(u.root().unwrap().layer, Layer::Loc);
-    let mut seen_spec = false;
+    let first = u.root().unwrap();
+    assert_eq!(first.layer, Layer::Loc);
+    let mut promoted = None;
     for _ in 0..200 {
         u.tick_filter();
         match u.root() {
-            Some(r) if r.layer == Layer::Spec => {
-                seen_spec = true;
+            Some(r) if !r.same(&first) => {
+                promoted = Some(r);
                 break;
             }
             None => break,
             _ => {}
         }
     }
-    assert!(seen_spec, "the dyad becomes the root when the root is eaten");
+    let r = promoted.expect("the dyad becomes the root when the root is eaten");
+    // And it is voiced AS a root: the cascade drops the notes to the right
+    // octave, so the promoted dyad carries a root's weight, a root's decay
+    // and a root's passage through stone. That is what lets a re-aimed
+    // company hear where it is now going.
+    assert_eq!(r.layer, Layer::Loc);
+    assert!(r.same(&region_root(4 + 4)), "the dyad's pitch class, voiced as the root");
 }
 
 #[test]

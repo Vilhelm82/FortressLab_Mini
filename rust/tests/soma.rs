@@ -271,3 +271,83 @@ fn a_company_on_the_march_carries_its_own_ground() {
     assert!(marching > 0.8 * at_post, "and anchor it about as well as the post does");
     assert!(marching < at_post, "but not better — he still lacks the specifier");
 }
+
+/// Will's arithmetic: a four-note chord is a post and two extensions, so a
+/// company that loses its sergeant gets three re-targetings before it is
+/// down to an area. Order complexity is how long it survives him.
+#[test]
+fn a_company_gets_one_re_aiming_for_every_note_but_the_last() {
+    use fortress_sim::field::{extension, Wandering};
+
+    let orders = vec![
+        region_root(0),
+        dyad_specifier(0, 0),
+        extension(0, 1),
+        extension(0, 3),
+    ];
+    let mut w = Wandering::new(orders.clone());
+    assert_eq!(w.cascades_remaining(), 3);
+
+    let mut promotions = 0;
+    let mut root = w.root().unwrap();
+    for _ in 0..4000 {
+        w.tick_filter();
+        match w.root() {
+            Some(n) if !n.same(&root) => {
+                promotions += 1;
+                root = n;
+            }
+            None => break,
+            _ => {}
+        }
+        if w.dissolved() {
+            break;
+        }
+    }
+    assert_eq!(promotions, 3, "one for each note above the last");
+    assert!(w.dissolved());
+    assert_eq!(w.cascades_remaining(), 0);
+
+    // And a simpler order dissolves sooner, which is the whole consequence.
+    let simple = Wandering::new(vec![region_root(0), dyad_specifier(0, 0)]);
+    assert!(simple.cascades_remaining() < Wandering::new(orders).cascades_remaining());
+}
+
+/// The consequence of dropping the octave, measured rather than asserted.
+///
+/// A promoted dyad left in its own register decays fast and dies at stone.
+/// Voiced as a root it carries. So a re-aimed company can actually hear the
+/// place it has just decided to go — which is the difference between men
+/// who re-target and men who mill about.
+#[test]
+fn a_promoted_root_carries_where_the_dyad_it_came_from_could_not() {
+    use fortress_sim::field::{extension, Wandering};
+
+    let mut u = Wandering::new(vec![
+        region_root(4),
+        dyad_specifier(4, 1),
+        extension(4, 3),
+    ]);
+    let first = u.root().unwrap();
+    for _ in 0..400 {
+        u.tick_filter();
+        if !u.root().unwrap().same(&first) {
+            break;
+        }
+    }
+    let promoted = u.root().unwrap();
+    let as_dyad = dyad_specifier(4, 1);
+    assert!(promoted.semitone() == as_dyad.semitone(), "same place, new register");
+
+    let w = World::new(64, 14, 2);
+    let src = (6, 7, 1);
+    let far = (46, 7, 1);
+    let e_root = Emitter::new(src, vec![promoted]);
+    let e_dyad = Emitter::new(src, vec![as_dyad]);
+    let mut f = Field::new(&w, vec![e_root.clone(), e_dyad.clone()]);
+    let heard_root = f.band_at(&e_root, &promoted, far);
+    let heard_dyad = f.band_at(&e_dyad, &as_dyad, far);
+
+    assert!(heard_root > heard_dyad * 10.0,
+        "the new objective must be audible from where they are standing");
+}
