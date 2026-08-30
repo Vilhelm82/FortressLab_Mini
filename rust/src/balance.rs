@@ -92,9 +92,83 @@ pub const LAMBDA_OBS: f64 = 0.3;
 pub const HPF_START_HZ: f64 = BASE_HZ;
 pub const HPF_MULT_PER_TICK: f64 = 1.06;
 
-/// Constants of the behavioural substrate. Same warning as the rest of this
-/// file: the orderings are Will's, the numbers are provisional.
+/// Constants of the behavioural substrate.
+///
+/// The orderings are Will's and are structural. The numbers are knobs, and
+/// nobody should be guessing at them by hand — `Tuning` exists so the sweep
+/// can dial them against scenario targets. The consts below are its
+/// starting point and nothing more.
 pub mod soma {
+    /// Every dialable number in the substrate, in one place.
+    ///
+    /// `Tuning::default()` is the constants below. The sweep varies this and
+    /// scores the result against the scenario battery; whatever survives is
+    /// the balance, and it is a measurement rather than an opinion.
+    #[derive(Copy, Clone, Debug, PartialEq)]
+    pub struct Tuning {
+        pub arousal_scale: f64,
+        pub tau_arousal: f64,
+        pub beta: f64,
+        pub kappa: f64,
+        pub fence_load: f64,
+        pub alpha: f64,
+        pub load_max: f64,
+        pub numb_clear: f64,
+        pub tau_choir: f64,
+        pub choir_ref: f64,
+        pub bath_omega: f64,
+        pub bath_lambda: f64,
+        pub bath_coupling: f64,
+        pub strain_k: f64,
+        pub strain_rest: f64,
+        pub suspense_gain: f64,
+        pub strain_half: f64,
+        pub fidelity_half: f64,
+        pub fidelity_ceil: f64,
+        pub attention_cost: f64,
+    }
+
+    impl Default for Tuning {
+        fn default() -> Tuning {
+            Tuning {
+                arousal_scale: AROUSAL_SCALE,
+                tau_arousal: TAU_AROUSAL,
+                beta: BETA,
+                kappa: KAPPA,
+                fence_load: FENCE_LOAD,
+                alpha: ALPHA,
+                load_max: LOAD_MAX,
+                numb_clear: NUMB_CLEAR,
+                tau_choir: TAU_CHOIR,
+                choir_ref: CHOIR_REF,
+                bath_omega: BATH_OMEGA,
+                bath_lambda: BATH_LAMBDA,
+                bath_coupling: BATH_COUPLING,
+                strain_k: STRAIN_K,
+                strain_rest: STRAIN_REST,
+                suspense_gain: SUSPENSE_GAIN,
+                strain_half: STRAIN_HALF,
+                fidelity_half: FIDELITY_HALF,
+                fidelity_ceil: FIDELITY_CEIL,
+                attention_cost: ATTENTION_COST,
+            }
+        }
+    }
+
+    impl Tuning {
+        /// The loop gain that decides whether sustained dread is survivable.
+        ///
+        /// Arousal grows with load through the stretched time constant, and
+        /// load grows with arousal through the coupling. Above 1 the latch
+        /// is inevitable and only time-to-break discriminates; below 1 a man
+        /// settles at a wobble and can stand there indefinitely. Which of
+        /// those the game wants is a design target, not a number to guess.
+        pub fn loop_gain(&self, dread: f64, allies: f64) -> f64 {
+            let tau_c = self.tau_choir * self.choir_ref / allies.max(1.0);
+            self.alpha * tau_c * dread * self.tau_arousal * self.beta / self.load_max
+        }
+    }
+
     /// Seconds a tick represents.
     pub const TICK_SECONDS: f64 = 0.1;
 

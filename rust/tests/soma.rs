@@ -4,6 +4,9 @@
 use fortress_sim::balance::soma::*;
 use fortress_sim::soma::*;
 
+/// Today's knob settings. The sweep varies these; nothing else should.
+fn tune() -> Tuning { Tuning::default() }
+
 fn b(x: f64, y: f64, z: f64) -> Bearing {
     bearing(x, y, z).unwrap()
 }
@@ -21,7 +24,7 @@ fn corridor() -> (Bearing, Bearing, Bearing) {
 fn run(s: &mut Soma, choir: &mut Choir, strain: f64, ticks: usize) -> Vec<f64> {
     (0..ticks)
         .map(|_| {
-            s.tick(strain, &[], choir);
+            s.tick(strain, &[], choir, &tune());
             s.load
         })
         .collect()
@@ -31,34 +34,34 @@ fn run(s: &mut Soma, choir: &mut Choir, strain: f64, ticks: usize) -> Vec<f64> {
 fn a_corridor_is_worse_to_stand_in_than_open_ground() {
     let (a, c, d) = open();
     let (p, q, r) = corridor();
-    assert!(fix(p, q, r).strain > fix(a, c, d).strain * 100.0);
+    assert!(fix(p, q, r, &tune()).strain > fix(a, c, d, &tune()).strain * 100.0);
 }
 
 #[test]
 fn a_perfectly_degenerate_frame_is_bad_not_infinite() {
     let along = b(1.0, 0.0, 0.0);
-    let f = fix(along, along, along);
+    let f = fix(along, along, along, &tune());
     assert!(f.strain.is_finite());
-    assert!(f.strain > fix(open().0, open().1, open().2).strain);
-    assert!(dread(f.strain).is_finite());
+    assert!(f.strain > fix(open().0, open().1, open().2, &tune()).strain);
+    assert!(dread(f.strain, &tune()).is_finite());
 }
 
 #[test]
 fn dread_saturates_however_bad_the_geometry_gets() {
-    assert!(dread(1e12) < SUSPENSE_GAIN);
-    assert!(dread(1e12) > dread(1e3));
-    assert!(dread(1e3) > dread(2.0));
+    assert!(dread(1e12, &tune()) < SUSPENSE_GAIN);
+    assert!(dread(1e12, &tune()) > dread(1e3, &tune()));
+    assert!(dread(1e3, &tune()) > dread(2.0, &tune()));
 }
 
 #[test]
 fn the_quiet_winds_a_man_up_with_nothing_happening() {
     let (p, q, r) = corridor();
-    let strain = fix(p, q, r).strain;
+    let strain = fix(p, q, r, &tune()).strain;
     let mut s = Soma::fresh();
-    let mut choir = Choir::new(0);
+    let mut choir = Choir::new(0, &tune());
     let start = s.arousal;
     for _ in 0..200 {
-        s.tick(strain, &[], &mut choir);
+        s.tick(strain, &[], &mut choir, &tune());
     }
     assert!(s.arousal > start, "no event occurred and he should still be worse");
 }
@@ -68,22 +71,22 @@ fn arousal_opens_the_border_and_load_stiffens_it() {
     let calm = Soma { arousal: 0.0, load: 0.0, numb: false };
     let scared = Soma { arousal: 4.0, load: 0.0, numb: false };
     let scared_and_battered = Soma { arousal: 4.0, load: 8.0, numb: false };
-    assert!(scared.permeability() < calm.permeability());
-    assert!(scared_and_battered.permeability() > scared.permeability());
+    assert!(scared.permeability(&tune()) < calm.permeability(&tune()));
+    assert!(scared_and_battered.permeability(&tune()) > scared.permeability(&tune()));
 }
 
 #[test]
 fn a_border_that_holds_lets_nothing_through_and_no_border_lets_everything() {
     let calm = Soma { arousal: 0.0, load: 0.0, numb: false };
     let numb = Soma { arousal: 0.0, load: LOAD_MAX, numb: true };
-    assert!(calm.crossing(1.0).abs() < 1e-12);
-    assert!((numb.crossing(1.0) - 1.0).abs() < 1e-12);
+    assert!(calm.crossing(1.0, &tune()).abs() < 1e-12);
+    assert!((numb.crossing(1.0, &tune()) - 1.0).abs() < 1e-12);
 }
 
 #[test]
 fn a_man_alone_does_not_come_back() {
     let mut s = Soma::battered(6.0);
-    let mut choir = Choir::new(0);
+    let mut choir = Choir::new(0, &tune());
     let load = run(&mut s, &mut choir, STRAIN_REST, 600);
     assert!(load.windows(2).all(|w| w[1] >= w[0]), "no bath, so nothing may drain");
 }
@@ -91,11 +94,11 @@ fn a_man_alone_does_not_come_back() {
 #[test]
 fn the_choir_sings_him_down() {
     let mut alone = Soma::battered(6.0);
-    let mut none = Choir::new(0);
+    let mut none = Choir::new(0, &tune());
     run(&mut alone, &mut none, STRAIN_REST, 600);
 
     let mut formed = Soma::battered(6.0);
-    let mut many = Choir::new(12);
+    let mut many = Choir::new(12, &tune());
     run(&mut formed, &mut many, STRAIN_REST, 600);
 
     assert!(formed.load < alone.load);
@@ -121,11 +124,11 @@ fn a_small_remnant_hands_it_back_and_a_formation_does_not() {
     }
 
     let mut remnant = Soma::battered(6.0);
-    let mut small = Choir::new(2);
+    let mut small = Choir::new(2, &tune());
     let thin = run(&mut remnant, &mut small, STRAIN_REST, 1200);
 
     let mut company = Soma::battered(6.0);
-    let mut wide = Choir::new(12);
+    let mut wide = Choir::new(12, &tune());
     let full = run(&mut company, &mut wide, STRAIN_REST, 1200);
 
     assert!(!small.wide() && wide.wide());
@@ -138,13 +141,13 @@ fn a_small_remnant_hands_it_back_and_a_formation_does_not() {
 fn the_same_setup_runs_the_same_way_twice() {
     let go = || {
         let (p, q, r) = corridor();
-        let strain = fix(p, q, r).strain;
+        let strain = fix(p, q, r, &tune()).strain;
         let mut s = Soma::fresh();
-        let mut c = Choir::new(2);
+        let mut c = Choir::new(2, &tune());
         (0..400)
             .map(|t| {
                 let ev: &[Impact] = if t == 100 { &[Impact::NearMiss] } else { &[] };
-                s.tick(strain, ev, &mut c);
+                s.tick(strain, ev, &mut c, &tune());
                 (s.arousal.to_bits(), s.load.to_bits())
             })
             .collect::<Vec<_>>()
@@ -166,7 +169,7 @@ fn offered_at(steps: i32) -> f64 {
     let post = (6, 7, 1);
     let mut f = Field::new(&w, vec![Emitter::new(post, chord())]);
     let heard = f.hear((post.0 + steps, post.1, post.2));
-    fidelity(&heard, &chord())
+    fidelity(&heard, &chord(), &tune())
 }
 
 #[test]
@@ -182,16 +185,16 @@ fn fright_costs_a_man_the_song() {
     let calm = Soma { arousal: 0.0, load: 0.0, numb: false };
     let scared = Soma { arousal: 5.0, load: 0.0, numb: false };
     let numb = Soma { arousal: 5.0, load: LOAD_MAX, numb: true };
-    assert!(scared.hold(0.8) < calm.hold(0.8));
-    assert_eq!(numb.hold(0.8), 0.0);
+    assert!(scared.hold(0.8, &tune()) < calm.hold(0.8, &tune()));
+    assert_eq!(numb.hold(0.8, &tune()), 0.0);
 }
 
 #[test]
 fn losing_the_song_lays_the_frame_flat() {
     let post = b(-1.0, 0.0, 0.0);
     let threat = b(0.6, -0.8, 0.0);
-    let sure = fix(post, anchor(post, 0.9), threat).strain;
-    let lost = fix(post, anchor(post, 0.02), threat).strain;
+    let sure = fix(post, anchor(post, 0.9), threat, &tune()).strain;
+    let lost = fix(post, anchor(post, 0.02), threat, &tune()).strain;
     assert!(lost > sure * 10.0, "a man with no anchor stands in a corridor");
 }
 
@@ -208,11 +211,11 @@ fn a_choir_lets_a_man_survive_a_thinner_hold_on_the_song() {
         let post = b(-1.0, 0.0, 0.0);
         let threat = b(0.6, -0.8, 0.0);
         let mut s = Soma::fresh();
-        let mut c = Choir::new(allies);
+        let mut c = Choir::new(allies, &tune());
         for t in 0..900 {
-            let strain = fix(post, anchor(post, s.hold(offered)), threat).strain;
+            let strain = fix(post, anchor(post, s.hold(offered, &tune())), threat, &tune()).strain;
             let ev: &[Impact] = if t == 100 { &[Impact::AllyDeath] } else { &[] };
-            s.tick(strain, ev, &mut c);
+            s.tick(strain, ev, &mut c, &tune());
         }
         s.numb
     }
@@ -249,18 +252,18 @@ fn a_company_on_the_march_carries_its_own_ground() {
     let at_post = {
         let mut f = Field::new(&w, vec![post_emitter.clone()]);
         let heard = f.hear((post.0 + 1, post.1, post.2));
-        fidelity(&heard, &chord())
+        fidelity(&heard, &chord(), &tune())
     };
     let straggler = {
         let mut f = Field::new(&w, vec![post_emitter.clone()]);
         let heard = f.hear(far);
-        fidelity(&heard, &chord())
+        fidelity(&heard, &chord(), &tune())
     };
     let marching = {
         let leader = Emitter::new((far.0 - 1, far.1, far.2), company_voice(0));
         let mut f = Field::new(&w, vec![post_emitter.clone(), leader]);
         let heard = f.hear(far);
-        fidelity(&heard, &chord())
+        fidelity(&heard, &chord(), &tune())
     };
 
     // The straggler is not destitute: the bass carries, so the root still

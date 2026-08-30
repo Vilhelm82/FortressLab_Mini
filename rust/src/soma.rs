@@ -61,7 +61,7 @@ pub struct Fix {
 }
 
 /// Read the fix from three bearings. Seven multiplies and a divide.
-pub fn fix(a: Bearing, b: Bearing, c: Bearing) -> Fix {
+pub fn fix(a: Bearing, b: Bearing, c: Bearing, t: &Tuning) -> Fix {
     let (g12, g13, g23) = (dot(a, b), dot(a, c), dot(b, c));
     let sq = g12 * g12 + g13 * g13 + g23 * g23;
     let trip = g12 * g13 * g23;
@@ -69,7 +69,7 @@ pub fn fix(a: Bearing, b: Bearing, c: Bearing) -> Fix {
     let det_i = 8.0 - 2.0 * sq - 2.0 * trip;
     let d = delta.max(DEGENERACY_FLOOR);
     let i = det_i.max(DEGENERACY_FLOOR);
-    Fix { delta, det_i, strain: STRAIN_K / (d.sqrt() * i) }
+    Fix { delta, det_i, strain: t.strain_k / (d.sqrt() * i) }
 }
 
 /// Things that happen to a man, as opposed to things he is enduring.
@@ -122,19 +122,20 @@ pub struct Choir {
     pub allies: usize,
     modes: Vec<Mode>,
     freqs: Vec<f64>,
+    t: Tuning,
 }
 
 impl Choir {
-    pub fn new(allies: usize) -> Choir {
+    pub fn new(allies: usize, t: &Tuning) -> Choir {
         let n = allies.min(BATH_CAP);
         let freqs = (0..n)
             .map(|k| {
-                let t = if n == 1 { 0.0 } else { k as f64 / (n - 1) as f64 };
-                let e = -BATH_LAMBDA + 2.0 * BATH_LAMBDA * t;
-                BATH_OMEGA * e.exp()
+                let u = if n == 1 { 0.0 } else { k as f64 / (n - 1) as f64 };
+                let e = -t.bath_lambda + 2.0 * t.bath_lambda * u;
+                t.bath_omega * e.exp()
             })
             .collect();
-        Choir { allies, modes: vec![Mode::default(); n], freqs }
+        Choir { allies, modes: vec![Mode::default(); n], freqs, t: *t }
     }
 
     /// Whether this bath is wide enough to behave as a smooth drain.
@@ -152,19 +153,19 @@ impl Choir {
             return 0.0;
         }
         if self.wide() {
-            let tau = TAU_CHOIR * CHOIR_REF / (self.allies as f64);
+            let tau = self.t.tau_choir * self.t.choir_ref / (self.allies as f64);
             return load / tau;
         }
         let mut returned = 0.0;
         for k in 0..self.modes.len() {
             let w = self.freqs[k];
             let m = self.modes[k];
-            let stored = m.stored + dt * (-w * m.flowing + BATH_COUPLING * load);
+            let stored = m.stored + dt * (-w * m.flowing + self.t.bath_coupling * load);
             let flowing = m.flowing + dt * (w * m.stored);
             self.modes[k] = Mode { stored, flowing };
             returned += stored;
         }
-        BATH_COUPLING * returned
+        self.t.bath_coupling * returned
     }
 
     /// Rough first revival, seconds — the period on which a small bath
@@ -206,9 +207,9 @@ fn sech(x: f64) -> f64 {
 /// as geometry. Dread does have one: a man can only be so frightened of a
 /// quiet room. So the reading is taken on the logarithm, which is the scale
 /// the rest of the acoustics already uses, and saturates.
-pub fn dread(strain: f64) -> f64 {
-    let l = (1.0 + strain / STRAIN_REST).ln().max(0.0);
-    SUSPENSE_GAIN * l / (l + STRAIN_HALF)
+pub fn dread(strain: f64, t: &Tuning) -> f64 {
+    let l = (1.0 + strain / t.strain_rest).ln().max(0.0);
+    t.suspense_gain * l / (l + t.strain_half)
 }
 
 impl Soma {
@@ -231,25 +232,25 @@ impl Soma {
     /// Load stiffens it and arousal dissolves it. The battered veteran needs
     /// a bigger fright than the fresh boy to leave his mates — and startles
     /// at more, which is a different quantity and pulls the other way.
-    pub fn permeability(&self) -> f64 {
+    pub fn permeability(&self, t: &Tuning) -> f64 {
         if self.numb {
             return 0.0;
         }
-        let stiffen = 1.0 + FENCE_LOAD * (self.load / LOAD_MAX);
-        HALF_PI * sech(self.arousal / (AROUSAL_SCALE * stiffen))
+        let stiffen = 1.0 + t.fence_load * (self.load / t.load_max);
+        HALF_PI * sech(self.arousal / (t.arousal_scale * stiffen))
     }
 
     /// What he does with a net outward pull. The border is not a wall and
     /// not a door; `cos` of the permeability is the share of the pull that
     /// becomes movement, and the rest is refusal.
-    pub fn crossing(&self, pull: f64) -> f64 {
-        self.permeability().cos() * pull
+    pub fn crossing(&self, pull: f64, t: &Tuning) -> f64 {
+        self.permeability(t).cos() * pull
     }
 
     /// How much a given event lands on him. The battered man's threshold
     /// collapsed, so the same creak hits harder.
-    pub fn sensitivity(&self) -> f64 {
-        (KAPPA * self.load / LOAD_MAX).exp()
+    pub fn sensitivity(&self, t: &Tuning) -> f64 {
+        (t.kappa * self.load / t.load_max).exp()
     }
 
     /// What actually reaches him of the fidelity the field is offering.
@@ -263,11 +264,11 @@ impl Soma {
     ///
     /// The numb hear none of it at all, which is why they cannot be
     /// recalled.
-    pub fn hold(&self, offered: f64) -> f64 {
+    pub fn hold(&self, offered: f64, t: &Tuning) -> f64 {
         if self.numb {
             return 0.0;
         }
-        offered / (1.0 + ATTENTION_COST * self.arousal / AROUSAL_SCALE)
+        offered / (1.0 + t.attention_cost * self.arousal / t.arousal_scale)
     }
 
     /// One tick.
@@ -277,31 +278,31 @@ impl Soma {
     /// unlike the impacts, which are things that actually happened. The
     /// still corridor supplies the first and none of the second, which is
     /// the whole point of it.
-    pub fn tick(&mut self, strain: f64, impacts: &[Impact], choir: &mut Choir) {
+    pub fn tick(&mut self, strain: f64, impacts: &[Impact], choir: &mut Choir, t: &Tuning) {
         let dt = TICK_SECONDS;
 
         // Sensitisation is a startle threshold: it sharpens what HAPPENS to
         // him, not the chronic weight of a bad room. A battered man jumps at
         // timber creaks — a creak is an event. Dread is not.
-        let suspense = dread(strain);
+        let suspense = dread(strain, t);
         let events: f64 = impacts.iter().map(|i| i.weight()).sum();
-        let input = suspense + self.sensitivity() * events / dt;
+        let input = suspense + self.sensitivity(t) * events / dt;
 
-        let tau = TAU_AROUSAL * (1.0 + BETA * self.load / LOAD_MAX);
+        let tau = t.tau_arousal * (1.0 + t.beta * self.load / t.load_max);
         self.arousal += dt * (input - self.arousal / tau);
         if self.arousal < 0.0 {
             self.arousal = 0.0;
         }
 
         let drain = choir.drain(self.load, dt);
-        self.load += dt * (ALPHA * self.arousal - drain);
+        self.load += dt * (t.alpha * self.arousal - drain);
         if self.load < 0.0 {
             self.load = 0.0;
         }
-        if self.load >= LOAD_MAX {
-            self.load = LOAD_MAX;
+        if self.load >= t.load_max {
+            self.load = t.load_max;
             self.numb = true;
-        } else if self.numb && self.load < NUMB_CLEAR * LOAD_MAX {
+        } else if self.numb && self.load < t.numb_clear * t.load_max {
             self.numb = false;
         }
     }
@@ -320,7 +321,11 @@ impl Soma {
 ///
 /// Hearing a note at all is most of its value; hearing it loudly adds
 /// little. Losing it entirely is what costs.
-pub fn fidelity(heard: &[(crate::field::Note, f64)], ordered: &[crate::field::Note]) -> f64 {
+pub fn fidelity(
+    heard: &[(crate::field::Note, f64)],
+    ordered: &[crate::field::Note],
+    t: &Tuning,
+) -> f64 {
     let mut want = 0.0;
     let mut got = 0.0;
     for n in ordered {
@@ -328,13 +333,13 @@ pub fn fidelity(heard: &[(crate::field::Note, f64)], ordered: &[crate::field::No
         want += w;
         if let Some((_, a)) = heard.iter().find(|(m, _)| m.same(n)) {
             let a = a.abs();
-            got += w * (a / (a + FIDELITY_HALF));
+            got += w * (a / (a + t.fidelity_half));
         }
     }
     if want <= 0.0 {
         0.0
     } else {
-        FIDELITY_CEIL * (got / want)
+        t.fidelity_ceil * (got / want)
     }
 }
 

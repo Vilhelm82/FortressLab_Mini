@@ -9,6 +9,9 @@
 use fortress_sim::balance::soma::*;
 use fortress_sim::soma::*;
 
+/// Today's knob settings. The sweep varies these; nothing else should.
+fn tune() -> Tuning { Tuning::default() }
+
 fn bar(v: f64, scale: f64, width: usize) -> String {
     let n = ((v / scale) * width as f64).round().max(0.0) as usize;
     let n = n.min(width);
@@ -69,24 +72,24 @@ fn hallway(mate_on_the_walk: bool) -> Vec<Row> {
     let b_third = if mate_on_the_walk { look(me, walk) } else { b_post };
 
     let mut s = Soma::fresh();
-    let mut choir = Choir::new(if mate_on_the_walk { 1 } else { 0 });
+    let mut choir = Choir::new(if mate_on_the_walk { 1 } else { 0 }, &tune());
     let mut rows = Vec::new();
 
     for t in 0..260 {
         // Where the thing he is tracking appears to be.
         let b_threat = if t < 160 { look(me, mouth) } else { look(me, door) };
-        let f = fix(b_post, b_third, b_threat);
+        let f = fix(b_post, b_third, b_threat, &tune());
 
         // The only event in the whole run: the door goes in.
         let impacts: &[Impact] = if t == 160 { &[Impact::NearMiss] } else { &[] };
 
-        s.tick(f.strain, impacts, &mut choir);
+        s.tick(f.strain, impacts, &mut choir, &tune());
         rows.push(Row {
             tick: t,
             strain: f.strain,
             arousal: s.arousal,
             load: s.load,
-            perm: s.permeability(),
+            perm: s.permeability(&tune()),
             numb: s.numb,
         });
     }
@@ -98,17 +101,17 @@ fn hallway(mate_on_the_walk: bool) -> Vec<Row> {
 /// does.
 fn recovery(allies: usize, ticks: usize) -> Vec<Row> {
     let mut s = Soma::battered(6.0);
-    let mut choir = Choir::new(allies);
+    let mut choir = Choir::new(allies, &tune());
     let mut rows = Vec::new();
     for t in 0..ticks {
         // Open geometry, nothing happening: no suspense, no events.
-        s.tick(STRAIN_REST, &[], &mut choir);
+        s.tick(STRAIN_REST, &[], &mut choir, &tune());
         rows.push(Row {
             tick: t,
             strain: STRAIN_REST,
             arousal: s.arousal,
             load: s.load,
-            perm: s.permeability(),
+            perm: s.permeability(&tune()),
             numb: s.numb,
         });
     }
@@ -138,7 +141,7 @@ fn main() {
     println!("\n=== RECOVERY — a battered man left in silence ===");
     for allies in [0usize, 2, 12] {
         let rows = recovery(allies, 1200);
-        let c = Choir::new(allies);
+        let c = Choir::new(allies, &tune());
         let start = 6.0;
         let end = rows[rows.len() - 1].load;
         // Does it come back up after going down? That is the whole question.
@@ -220,16 +223,16 @@ fn anchored(steps_from_post: i32, allies: usize, shock: usize) -> Vec<(usize, f6
     let b_threat = look((me.0 as f64, me.1 as f64, me.2 as f64), (20.0, 2.0, 1.0));
 
     let heard = f.hear(me);
-    let offered = fidelity(&heard, &chord);
+    let offered = fidelity(&heard, &chord, &tune());
 
     let mut s = Soma::fresh();
-    let mut choir = Choir::new(allies);
+    let mut choir = Choir::new(allies, &tune());
     let mut out = Vec::new();
     for t in 0..600 {
-        let held = s.hold(offered);
-        let strain = fix(b_post, anchor(b_post, held), b_threat).strain;
+        let held = s.hold(offered, &tune());
+        let strain = fix(b_post, anchor(b_post, held), b_threat, &tune()).strain;
         let impacts: &[Impact] = if t == shock { &[Impact::AllyDeath] } else { &[] };
-        s.tick(strain, impacts, &mut choir);
+        s.tick(strain, impacts, &mut choir, &tune());
         out.push((t, held, strain, s.arousal, s.load, s.numb));
     }
     out
@@ -270,7 +273,7 @@ fn sergeant_drops(steps: i32) -> (usize, f64, f64, f64, bool) {
     let b_threat = look((me.0 as f64, me.1 as f64, me.2 as f64), (30.0, 2.0, 1.0));
 
     let mut s = Soma::fresh();
-    let mut choir = Choir::new(6);
+    let mut choir = Choir::new(6, &tune());
     let mut wandering = Wandering::new(orders);
     let mut promotions = 0usize;
     let mut root = wandering.root().unwrap();
@@ -286,14 +289,15 @@ fn sergeant_drops(steps: i32) -> (usize, f64, f64, f64, bool) {
                 }
             }
         }
-        let offered = fidelity(&heard, &wandering.notes);
-        let held = s.hold(offered);
-        let strain = fix(b_post, anchor(b_post, held), b_threat).strain;
+        let offered = fidelity(&heard, &wandering.notes, &tune());
+        let held = s.hold(offered, &tune());
+        let strain = fix(b_post, anchor(b_post, held), b_threat, &tune()).strain;
         let ev: &[Impact] = if t == 100 { &[Impact::AllyDeath] } else { &[] };
-        s.tick(strain, ev, &mut choir);
+        s.tick(strain, ev, &mut choir, &tune());
         if s.numb {
             return (promotions, held, strain, t as f64, true);
         }
     }
-    (promotions, s.hold(fidelity(&without.hear(me), &wandering.notes)), 0.0, f64::INFINITY, false)
+    let last = fidelity(&without.hear(me), &wandering.notes, &tune());
+    (promotions, s.hold(last, &tune()), 0.0, f64::INFINITY, false)
 }
