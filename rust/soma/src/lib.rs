@@ -1,22 +1,176 @@
-//! The behavioural substrate — what moves a man when the song does not.
+//! **soma** — a behavioural substrate for units in a game.
 //!
-//! The resonance field is not one of two voices arguing. It is the ground:
-//! always underneath, weighing on everything a man does, never itself a
-//! decision. What moves him is his own survival arithmetic, and how far he
-//! will carry it is a border his confidence draws around his post.
+//! Three numbers and a bit per man: what has just happened to him, what the
+//! day has cost him, what he is worried about, and whether he has stopped
+//! being reachable. From those come how far he will go, how well he can read
+//! a room, and when he comes apart.
 //!
-//! Three numbers per man and nothing else — a fast bucket, a slow bucket,
-//! and a latch. Arousal, load, numbness. Everything else is derived each
-//! tick and thrown away.
+//! It knows nothing about castles, sieges, or sound. What it wants from a
+//! game is small: three bearings to things the man cares about, a number
+//! between 0 and 1 for how firm his sense of where he is, whatever has just
+//! happened to him, and how many uninjured mates are within reach. What
+//! supplies those is the game's business.
 //!
-//! Nothing here rolls dice. Given the same inputs a man does the same thing.
+//! Nothing here rolls dice. Same inputs, same man, every time.
 //!
-//! DEBT: the derivations below use `exp`, `cosh` and `sqrt`. Only `sqrt` is
-//! required by IEEE to be identically rounded everywhere. Cross-device
-//! replay identity is therefore not yet guaranteed and is not this module's
-//! to fix — see the note in DEBT.md.
+//! DEBT: uses `exp`, `ln`, `cosh` and `sqrt`. Only `sqrt` is required by
+//! IEEE to be identically rounded everywhere, so cross-device replay
+//! identity is not yet guaranteed.
 
-use crate::balance::soma::*;
+/// Every dialable number, in one place.
+pub mod tuning {
+
+    /// Every dialable number in the substrate, in one place.
+    ///
+    /// `Tuning::default()` is the constants below. The sweep varies this and
+    /// scores the result against the scenario battery; whatever survives is
+    /// the balance, and it is a measurement rather than an opinion.
+    #[derive(Copy, Clone, Debug, PartialEq)]
+    pub struct Tuning {
+        pub arousal_scale: f64,
+        pub tau_arousal: f64,
+        pub beta: f64,
+        pub kappa: f64,
+        pub fence_load: f64,
+        pub alpha: f64,
+        pub load_max: f64,
+        pub numb_clear: f64,
+        pub tau_choir: f64,
+        pub choir_ref: f64,
+        pub bath_omega: f64,
+        pub bath_lambda: f64,
+        pub bath_coupling: f64,
+        pub strain_k: f64,
+        pub strain_rest: f64,
+        pub suspense_gain: f64,
+        pub strain_half: f64,
+        pub fidelity_half: f64,
+        pub fidelity_ceil: f64,
+        pub attention_cost: f64,
+        pub tau_concern: f64,
+        pub concern_max: f64,
+    }
+
+    impl Default for Tuning {
+        fn default() -> Tuning {
+            Tuning {
+                arousal_scale: AROUSAL_SCALE,
+                tau_arousal: TAU_AROUSAL,
+                beta: BETA,
+                kappa: KAPPA,
+                fence_load: FENCE_LOAD,
+                alpha: ALPHA,
+                load_max: LOAD_MAX,
+                numb_clear: NUMB_CLEAR,
+                tau_choir: TAU_CHOIR,
+                choir_ref: CHOIR_REF,
+                bath_omega: BATH_OMEGA,
+                bath_lambda: BATH_LAMBDA,
+                bath_coupling: BATH_COUPLING,
+                strain_k: STRAIN_K,
+                strain_rest: STRAIN_REST,
+                suspense_gain: SUSPENSE_GAIN,
+                strain_half: STRAIN_HALF,
+                fidelity_half: FIDELITY_HALF,
+                fidelity_ceil: FIDELITY_CEIL,
+                attention_cost: ATTENTION_COST,
+                tau_concern: TAU_CONCERN,
+                concern_max: CONCERN_MAX,
+            }
+        }
+    }
+
+    impl Tuning {
+        /// The loop gain that decides whether sustained dread is survivable.
+        ///
+        /// Arousal grows with load through the stretched time constant, and
+        /// load grows with arousal through the coupling. Above 1 the latch
+        /// is inevitable and only time-to-break discriminates; below 1 a man
+        /// settles at a wobble and can stand there indefinitely. Which of
+        /// those the game wants is a design target, not a number to guess.
+        pub fn loop_gain(&self, dread: f64, allies: f64) -> f64 {
+            let tau_c = self.tau_choir * self.choir_ref / allies.max(1.0);
+            self.alpha * tau_c * dread * self.tau_arousal * self.beta / self.load_max
+        }
+    }
+
+    /// Seconds a tick represents.
+    pub const TICK_SECONDS: f64 = 0.1;
+
+    /// Arousal at which the border is half open.
+    pub const AROUSAL_SCALE: f64 = 2.0;
+    /// Half-life of a fresh spike, seconds.
+    pub const TAU_AROUSAL: f64 = 4.0;
+    /// How much load stretches that half-life. Shaking hands are a longer
+    /// time constant, not a stat.
+    pub const BETA: f64 = 3.0;
+    /// How much load sharpens the response to an event. The battered man
+    /// jumps at timber creaks because his threshold collapsed.
+    pub const KAPPA: f64 = 1.5;
+    /// How much load stiffens the border. Load builds the fence; arousal
+    /// dissolves it. The veteran will not leave his mates.
+    pub const FENCE_LOAD: f64 = 1.0;
+
+    /// Fast into slow.
+    pub const ALPHA: f64 = 0.1;
+    /// Where the latch trips.
+    pub const LOAD_MAX: f64 = 10.0;
+    /// Fraction of the ceiling load must fall back below before the latch
+    /// clears. With no bath it never falls, so the rule rarely fires — the
+    /// physics does the work and this is only the guard.
+    pub const NUMB_CLEAR: f64 = 0.6;
+
+    /// Drain time at the reference choir, seconds.
+    pub const TAU_CHOIR: f64 = 90.0;
+    /// The choir size that drain time refers to.
+    pub const CHOIR_REF: f64 = 8.0;
+    /// Below this the bath is simulated mode by mode and rings.
+    pub const BATH_CAP: usize = 4;
+    /// Centre of the ally mode band, radians per second.
+    pub const BATH_OMEGA: f64 = 0.15;
+    /// Half-width of the band in log space.
+    pub const BATH_LAMBDA: f64 = 0.6;
+    /// How hard load couples into the bath.
+    pub const BATH_COUPLING: f64 = 0.30;
+
+    /// The constant in the fix-strain law, fitted against exact curvature
+    /// across both degenerate strata (2.25x residual, inside the character
+    /// variance the exact constant carries anyway).
+    pub const STRAIN_K: f64 = 8.0;
+    /// Strain in open, well-spread geometry. Only the excess is suspense.
+    pub const STRAIN_REST: f64 = 1.0;
+    /// How hard bad geometry drives arousal, at the limit. Quiet is
+    /// dangerous, but a man's dread is bounded even when his fix is not.
+    pub const SUSPENSE_GAIN: f64 = 0.35;
+    /// Half-point of the dread curve, in log-strain. Strain diverges at a
+    /// degenerate frame; suspense is read off its logarithm, which is the
+    /// scale everything else acoustic is already on.
+    pub const STRAIN_HALF: f64 = 8.0;
+    /// Floor on the determinant so a perfectly degenerate frame is merely
+    /// very bad rather than infinite.
+    pub const DEGENERACY_FLOOR: f64 = 1e-6;
+
+    /// Amplitude at which a band counts half toward fidelity. Hearing a
+    /// note at all is most of the value; hearing it loudly adds little.
+    pub const FIDELITY_HALF: f64 = 0.5;
+    /// How much arousal costs a man of the song. The somatic layer taking
+    /// gain is the same event as the subconscious losing it — this is the
+    /// coupling that closes the panic loop.
+    pub const ATTENTION_COST: f64 = 0.6;
+    /// Fidelity a man would have with a perfect chord and a clear head. He
+    /// never quite gets there, which is why the anchor is never exactly
+    /// orthogonal to the world.
+    pub const FIDELITY_CEIL: f64 = 0.97;
+
+    /// How long a worry takes to die in a room a man can actually read.
+    /// Where he cannot read the room it does not die at all — that factor
+    /// is what a corridor is worth, and it is worth nothing on its own.
+    pub const TAU_CONCERN: f64 = 25.0;
+    /// A man can only be worried about so much at once.
+    pub const CONCERN_MAX: f64 = 3.0;
+}
+
+pub use tuning::*;
 
 const HALF_PI: f64 = std::f64::consts::FRAC_PI_2;
 
@@ -357,39 +511,6 @@ impl Soma {
 }
 
 // --- the anchor ----------------------------------------------------------
-
-/// How much of his own song a man can still hear, from nothing to all of it.
-///
-/// This is his intuition and his hold on where he is. The bass carries the
-/// situational awareness — which region is mine, whose voice do I follow,
-/// am I standing where I was put — so depth is authority here exactly as it
-/// is in propagation. A man at his post hears his chord come back rich, and
-/// that richness IS the confirmation of purpose: he knows what to do, where
-/// to stand, and who to listen to.
-///
-/// Hearing a note at all is most of its value; hearing it loudly adds
-/// little. Losing it entirely is what costs.
-pub fn fidelity(
-    heard: &[(crate::field::Note, f64)],
-    ordered: &[crate::field::Note],
-    t: &Tuning,
-) -> f64 {
-    let mut want = 0.0;
-    let mut got = 0.0;
-    for n in ordered {
-        let w = n.layer.weight();
-        want += w;
-        if let Some((_, a)) = heard.iter().find(|(m, _)| m.same(n)) {
-            let a = a.abs();
-            got += w * (a / (a + t.fidelity_half));
-        }
-    }
-    if want <= 0.0 {
-        0.0
-    } else {
-        t.fidelity_ceil * (got / want)
-    }
-}
 
 /// The anchor as a bearing.
 ///

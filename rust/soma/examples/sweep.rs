@@ -10,8 +10,7 @@
 //!
 //! `cargo run --release --example sweep`
 
-use fortress_sim::balance::soma::*;
-use fortress_sim::soma::*;
+use soma::*;
 
 // ---------------------------------------------------------------- targets
 //

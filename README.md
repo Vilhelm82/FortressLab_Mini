@@ -23,30 +23,52 @@ leave them a guidebook — the architecture *is* the guidebook.
 
 ## Layout
 
-    src/fortresslab_mini/
-        kernel.py       state, resolution, terminal values  (spec §1-6)
-        solver.py       exact-rational simultaneous solver   (spec §8)
-        worldmap.py     terrain, line of sight, exposure field
-        enemy_brain.py  cost-field planner — path of least resistance
-    tests/
-        test_kernel.py    T0-T3 conformance battery
-        test_ladder.py    M0-M3 progressive map ladder
-        test_probe_2v1.py the discriminating non-zero-value probe
-    docs/
-        kernel_v0_spec.md  the ruled specification
+A Rust workspace of two crates. Python is retired. Godot 4 will wrap the sim
+through GDExtension for the mobile build; the engine stays a thin viewer over
+a replayed deviation log, so the engine choice is reversible.
+
+    rust/soma/          the behavioural substrate — a general model
+        src/lib.rs        arousal, load, concern, the border, the bath
+        tests/            proves the model with no game in scope
+        examples/maze.rs  controlled scenarios, nothing castle in them
+        examples/sweep.rs dials the constants against ruled targets
+
+    rust/sim/           this game
+        src/world.rs      voxel columns, stairs, loudest-path sound, 3D sight
+        src/field.rs      notes, addressing, perception, the inversion cascade
+        src/balance.rs    acoustic constants, all provisional
+        src/anchor.rs     the bridge: resonance chord -> one number for soma
+        src/devmap.rs     the development castle
+
+    docs/RULINGS.md       the authoritative ruling ledger
+    docs/RESONANCE.md     the command system as a specification
+
+**`soma` knows nothing about castles, sieges or sound**, and is meant to carry
+into other games unchanged. What it wants is small: three bearings to things a
+man cares about, one number for how firmly he knows where he is, whatever has
+just happened to him, and how many uninjured mates are in reach. Supplying
+those is the game's business, and `sim/src/anchor.rs` is where this game does
+it. Compute cost and scale get looked at once the model is right.
 
 ## Running
 
-    pip install -e ".[dev]"
-    pytest                 # fast battery
-    pytest -m slow         # includes the multi-minute 5x5 solve
+    cd rust
+    cargo test                                  # everything
+    cargo test -p soma                          # the model, standing alone
+    cargo run -p soma --example maze            # watch men in a corridor
+    cargo run -p soma --release --example sweep # dial the constants
+    cargo run -p fortress_sim --example anchored
 
 ## Status
 
-Kernel conformance passing. Stage 1 of the commander pipeline (enemy-brain
-planner) passing the full map ladder. Next: the particle/ledger belief layer,
-where the planner stops reading ground truth and starts reading what a
-commander merely believes.
+Field and world proven. The behavioural substrate runs, with the panic loop
+closing on its own: losing the song frightens a man and being frightened costs
+him more of it. Nothing the commander touches is built.
+
+Constants are **knobs, not rulings**. What gets ruled is the target — how long
+a formed company should stand a bad corridor, how fast a lone man should come
+apart — and the sweep finds numbers that satisfy all of them at once. Targets
+currently in `sweep.rs` are placeholders and flagged as such in the source.
 
 ## Open rulings
 
