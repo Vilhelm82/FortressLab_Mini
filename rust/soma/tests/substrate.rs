@@ -206,3 +206,70 @@ fn losing_the_song_lays_the_frame_flat() {
     let lost = fix(post, anchor(post, 0.02), threat, &tune()).strain;
     assert!(lost > sure * 10.0, "a man with no anchor stands in a corridor");
 }
+
+// --- the general form -----------------------------------------------------
+
+/// The general object must reproduce the spatial one exactly, or the
+/// calibration against exact curvature does not carry over.
+#[test]
+fn the_general_form_agrees_with_the_closed_form_for_three_bearings() {
+    let cases = [
+        (0.30, 0.20, 0.15),
+        (0.10, -0.25, 0.40),
+        (-0.50, -0.50, -0.35),
+        (-0.5, -0.5, -0.5),
+        (0.55, 0.55, 0.55),
+    ];
+    for (a, b, c) in cases {
+        let mut r = Refs::new(3);
+        r.set(0, 1, a).set(0, 2, b).set(1, 2, c);
+        let sq = a * a + b * b + c * c;
+        let trip = a * b * c;
+        assert!((r.generalised_variance() - (1.0 - sq + 2.0 * trip)).abs() < 1e-12);
+        assert!((r.rank_one_detector() - (8.0 - 2.0 * sq - 2.0 * trip)).abs() < 1e-12);
+    }
+}
+
+/// Nothing in the statistic is about space. Three witnesses who all heard
+/// the same rumour pin as little as three landmarks in a line, and a man
+/// reading them is in the same trouble.
+#[test]
+fn references_that_all_say_the_same_thing_pin_nothing_whatever_they_are() {
+    let mut independent = Refs::new(3);
+    independent.set(0, 1, 0.1).set(0, 2, 0.0).set(1, 2, -0.1);
+
+    let mut one_rumour = Refs::new(3);
+    one_rumour.set(0, 1, 0.99).set(0, 2, 0.99).set(1, 2, 0.99);
+
+    assert!(one_rumour.fix(&tune()).strain > independent.fix(&tune()).strain * 100.0);
+    assert!(one_rumour.generalised_variance() < independent.generalised_variance());
+}
+
+/// Any number of references, not three.
+#[test]
+fn the_model_does_not_care_how_many_references_a_man_has() {
+    for n in 2..=6 {
+        let spread = Refs::new(n);
+        let mut heaped = Refs::new(n);
+        for i in 0..n {
+            for j in (i + 1)..n {
+                heaped.set(i, j, 0.95);
+            }
+        }
+        assert!(spread.fix(&tune()).strain.is_finite());
+        assert!(heaped.fix(&tune()).strain > spread.fix(&tune()).strain,
+            "n = {n}: piling references on top of each other must cost him");
+    }
+}
+
+/// The anchor is just one more reference, and losing it collapses that
+/// reference onto one he already had.
+#[test]
+fn the_anchor_generalises_to_one_more_reference() {
+    let mut world = Refs::new(2);
+    world.set(0, 1, -0.9);
+    let sure = world.with_anchor(0.9, 0);
+    let lost = world.with_anchor(0.02, 0);
+    assert_eq!(sure.n(), 3);
+    assert!(lost.fix(&tune()).strain > sure.fix(&tune()).strain * 10.0);
+}

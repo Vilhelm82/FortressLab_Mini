@@ -5,11 +5,24 @@
 //! being reachable. From those come how far he will go, how well he can read
 //! a room, and when he comes apart.
 //!
-//! It knows nothing about castles, sieges, or sound. What it wants from a
-//! game is small: three bearings to things the man cares about, a number
-//! between 0 and 1 for how firm his sense of where he is, whatever has just
-//! happened to him, and how many uninjured mates are within reach. What
-//! supplies those is the game's business.
+//! It knows nothing about castles, sieges, sound, or space. What it wants
+//! from a game is four things, none of which name a genre:
+//!
+//! 1. **How much his sources of information duplicate each other.** Any
+//!    number of them, as a matrix of overlaps. Landmarks in a line, sensors
+//!    on one axis, three witnesses repeating one rumour — the statistic is
+//!    the same and so is the man's problem.
+//! 2. **How firmly he knows where he stands**, from 0 to 1. It enters as one
+//!    more source, independent when he is sure and collapsing onto the
+//!    others when he is not.
+//! 3. **What has just happened to him**, as impacts carrying a shock and a
+//!    question.
+//! 4. **How many uninjured companions are within reach**, which is the bath
+//!    his load drains into.
+//!
+//! What supplies those is the game's business. Bearings and `dot` are
+//! offered as a convenience for games with space in them, and are the only
+//! thing here that assumes any.
 //!
 //! Nothing here rolls dice. Same inputs, same man, every time.
 //!
@@ -214,16 +227,149 @@ pub struct Fix {
     pub strain: f64,
 }
 
-/// Read the fix from three bearings. Seven multiplies and a divide.
+/// What a man is using to place things, and how much those references say
+/// the same thing as each other.
+///
+/// This is the general object and it is not about space. A reference is
+/// anything he is reading the situation from; the matrix is how much any
+/// two of them duplicate each other, from 0 for independent to ±1 for
+/// saying exactly the same thing. Three landmarks in a line duplicate each
+/// other completely and pin nothing — and so do three witnesses who all
+/// heard the same rumour, three sensors on one axis, or three reports that
+/// came from one source. The statistic does not care which it is looking
+/// at, and neither does a frightened man.
+///
+/// Any number of references. Bearings are one way to fill it in, offered
+/// below for games that have space in them; a game that does not can set
+/// the correlations however it likes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Refs {
+    n: usize,
+    g: Vec<f64>,
+}
+
+impl Refs {
+    /// `n` references, none of them yet saying anything about each other.
+    pub fn new(n: usize) -> Refs {
+        let mut g = vec![0.0; n * n];
+        for i in 0..n {
+            g[i * n + i] = 1.0;
+        }
+        Refs { n, g }
+    }
+
+    pub fn n(&self) -> usize {
+        self.n
+    }
+
+    pub fn get(&self, i: usize, j: usize) -> f64 {
+        self.g[i * self.n + j]
+    }
+
+    /// How much references `i` and `j` are the same thing. Symmetric.
+    pub fn set(&mut self, i: usize, j: usize, overlap: f64) -> &mut Refs {
+        let v = overlap.clamp(-1.0, 1.0);
+        self.g[i * self.n + j] = v;
+        self.g[j * self.n + i] = v;
+        self
+    }
+
+    /// For games with space in them: directions to things, overlapping by
+    /// the cosine between them.
+    pub fn from_bearings(bs: &[Bearing]) -> Refs {
+        let mut r = Refs::new(bs.len());
+        for i in 0..bs.len() {
+            for j in (i + 1)..bs.len() {
+                r.set(i, j, dot(bs[i], bs[j]));
+            }
+        }
+        r
+    }
+
+    /// Add his hold on where he is as one more reference.
+    ///
+    /// At full fidelity it is independent of everything else he is reading
+    /// and the situation opens up. At zero it collapses onto reference
+    /// `aligned_with` — his sense of place stops telling him anything the
+    /// world was not already telling him — and the whole thing goes flat.
+    pub fn with_anchor(&self, fidelity: f64, aligned_with: usize) -> Refs {
+        let f = fidelity.clamp(0.0, 1.0);
+        let flat = (1.0 - f * f).sqrt();
+        let n = self.n + 1;
+        let mut r = Refs::new(n);
+        for i in 0..self.n {
+            for j in (i + 1)..self.n {
+                r.set(i, j, self.get(i, j));
+            }
+            r.set(i, self.n, flat * self.get(i, aligned_with));
+        }
+        r.set(aligned_with, self.n, flat);
+        r
+    }
+
+    /// Determinant of a small symmetric matrix, by elimination.
+    fn det_of(&self, diag_shift: f64) -> f64 {
+        let n = self.n;
+        let mut m: Vec<f64> = self.g.iter().map(|v| -v).collect();
+        for i in 0..n {
+            m[i * n + i] += diag_shift;
+        }
+        let mut det = 1.0;
+        for c in 0..n {
+            let mut p = c;
+            for r in (c + 1)..n {
+                if m[r * n + c].abs() > m[p * n + c].abs() {
+                    p = r;
+                }
+            }
+            if m[p * n + c].abs() < 1e-15 {
+                return 0.0;
+            }
+            if p != c {
+                for k in 0..n {
+                    m.swap(c * n + k, p * n + k);
+                }
+                det = -det;
+            }
+            det *= m[c * n + c];
+            for r in (c + 1)..n {
+                let f = m[r * n + c] / m[c * n + c];
+                for k in c..n {
+                    m[r * n + k] -= f * m[c * n + k];
+                }
+            }
+        }
+        det
+    }
+
+    /// How much independent information the whole set carries — `det G`,
+    /// the generalised variance. Zero the moment the references are
+    /// redundant in any way at all, however many of them there are.
+    pub fn generalised_variance(&self) -> f64 {
+        self.det_of(0.0) * if self.n % 2 == 0 { 1.0 } else { -1.0 }
+    }
+
+    /// Zero only when every reference says exactly the same thing.
+    ///
+    /// `det(nI − G)`. For three bearings this is exactly the inertia
+    /// determinant `8 − 2Σγ² − 2γ₁₂γ₁₃γ₂₃`, so nothing calibrated against
+    /// the old form has moved.
+    pub fn rank_one_detector(&self) -> f64 {
+        self.det_of(self.n as f64)
+    }
+
+    pub fn fix(&self, t: &Tuning) -> Fix {
+        let delta = self.generalised_variance();
+        let det_i = self.rank_one_detector();
+        let d = delta.max(DEGENERACY_FLOOR);
+        let i = det_i.max(DEGENERACY_FLOOR);
+        Fix { delta, det_i, strain: t.strain_k / (d.sqrt() * i) }
+    }
+}
+
+/// Read the fix from three bearings — the spatial convenience.
 pub fn fix(a: Bearing, b: Bearing, c: Bearing, t: &Tuning) -> Fix {
-    let (g12, g13, g23) = (dot(a, b), dot(a, c), dot(b, c));
-    let sq = g12 * g12 + g13 * g13 + g23 * g23;
-    let trip = g12 * g13 * g23;
-    let delta = 1.0 - sq + 2.0 * trip;
-    let det_i = 8.0 - 2.0 * sq - 2.0 * trip;
-    let d = delta.max(DEGENERACY_FLOOR);
-    let i = det_i.max(DEGENERACY_FLOOR);
-    Fix { delta, det_i, strain: t.strain_k / (d.sqrt() * i) }
+    Refs::from_bearings(&[a, b, c]).fix(t)
 }
 
 /// Things that happen to a man, as opposed to things he is enduring.

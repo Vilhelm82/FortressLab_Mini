@@ -43,12 +43,21 @@ a replayed deviation log, so the engine choice is reversible.
     docs/RULINGS.md       the authoritative ruling ledger
     docs/RESONANCE.md     the command system as a specification
 
-**`soma` knows nothing about castles, sieges or sound**, and is meant to carry
-into other games unchanged. What it wants is small: three bearings to things a
-man cares about, one number for how firmly he knows where he is, whatever has
-just happened to him, and how many uninjured mates are in reach. Supplying
-those is the game's business, and `sim/src/anchor.rs` is where this game does
-it. Compute cost and scale get looked at once the model is right.
+**`soma` knows nothing about castles, sieges, sound or space**, and is meant
+to carry into other games unchanged. It asks for four things, none of which
+name a genre: how much a man's sources of information duplicate each other,
+how firmly he knows where he stands, what has just happened to him, and how
+many uninjured companions are in reach.
+
+The first is a matrix of overlaps between however many references he is using.
+Three landmarks in a line pin nothing — and neither do three witnesses
+repeating one rumour, or three sensors on one axis. The statistic does not
+care which it is looking at, and neither does a frightened man. Bearings are
+one way to fill it in, for games that have space in them.
+
+Supplying those four is the game's business, and `sim/src/anchor.rs` is where
+this game does it. Compute cost and scale get looked at once the model is
+right.
 
 ## Running
 
