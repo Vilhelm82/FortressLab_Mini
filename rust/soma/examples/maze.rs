@@ -78,18 +78,17 @@ fn hallway(mate_on_the_walk: bool, alerted: bool) -> Vec<Row> {
     for t in 0..260 {
         // Where the thing he is tracking appears to be.
         let b_threat = if t < 160 { look(me, mouth) } else { look(me, door) };
-        let f = fix(b_post, b_third, b_threat, &tune());
+        let world = Refs::from_bearings(&[b_post, b_threat]);
 
         // t=60: word reaches him that something got inside. Nothing else
         // happens until the door goes in at t=160.
         let alert = if alerted && t == 60 { 1.0 } else { 0.0 };
-        let impacts: &[Impact] = if t == 160 { &[Impact::new(1.0, 1.0)] } else { &[] };
 
-        s.tick(f.strain, impacts, alert, &mut choir, &tune());
+        s.tick(&world, if mate_on_the_walk { 0.6 } else { 0.15 }, &mut choir, &tune());
         rows.push(Row {
             tick: t,
             concern: s.concern,
-            strain: f.strain,
+            strain: 0.0,
             arousal: s.arousal,
             load: s.load,
             cost: s.away_cost(&tune()),
@@ -108,7 +107,9 @@ fn recovery(allies: usize, ticks: usize) -> Vec<Row> {
     let mut rows = Vec::new();
     for t in 0..ticks {
         // Open geometry, nothing happening: no suspense, no events.
-        s.tick(STRAIN_REST, &[], 0.0, &mut choir, &tune());
+        let mut world = Refs::new(2);
+        world.set(0, 1, 0.0);
+        s.tick(&world, 0.9, &mut choir, &tune());
         rows.push(Row {
             tick: t,
             concern: s.concern,

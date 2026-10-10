@@ -20,10 +20,21 @@ fn corridor() -> (Bearing, Bearing, Bearing) {
     (b(-1.0, 0.0, 0.0), b(0.0, 1.0, 0.0), b(1.0, 0.0, 0.0))
 }
 
-fn run(s: &mut Soma, choir: &mut Choir, strain: f64, ticks: usize) -> Vec<f64> {
+fn world(pair: f64) -> Refs {
+    let mut r = Refs::new(2);
+    r.set(0, 1, pair);
+    r
+}
+
+/// Two references saying opposite things, and a firm hold: an open room.
+fn easy() -> (Refs, f64) { (world(0.0), 0.9) }
+/// Two references dead against each other and nothing to anchor on.
+fn tight() -> (Refs, f64) { (world(-1.0), 0.05) }
+
+fn run(s: &mut Soma, choir: &mut Choir, w: &(Refs, f64), ticks: usize) -> Vec<f64> {
     (0..ticks)
         .map(|_| {
-            s.tick(strain, &[], 0.0, choir, &tune());
+            s.tick(&w.0, w.1, choir, &tune());
             s.load
         })
         .collect()
@@ -58,51 +69,55 @@ fn dread_saturates_however_bad_the_geometry_gets() {
 /// it encoded the model before Will corrected it.
 #[test]
 fn a_man_with_nothing_on_his_mind_is_untouched_by_the_worst_geometry() {
-    let (p, q, r) = corridor();
-    let strain = fix(p, q, r, &tune()).strain;
+    let w = tight();
     let mut s = Soma::fresh();
     let mut choir = Choir::new(0, &tune());
     for _ in 0..3000 {
-        s.tick(strain, &[], 0.0, &mut choir, &tune());
+        s.tick(&w.0, w.1, &mut choir, &tune());
     }
     assert_eq!(s.arousal, 0.0);
     assert_eq!(s.load, 0.0);
     assert!(!s.numb);
 }
 
-/// Told that something got inside, the same man winds up — and the corridor
-/// is what stops him settling it. In a room he can read, the worry dies on
-/// its own.
+/// Something changes for the worse and a man wants to know what. Whether
+/// he can settle it is the room's business — in one he can read, the worry
+/// dies on its own; in one he cannot, it will not.
+///
+/// Note there is nothing to inject any more. A worry is not handed to a man
+/// by the caller, it is what a change in his footing IS.
 #[test]
 fn a_worry_dies_in_a_room_a_man_can_read_and_will_not_in_a_corridor() {
-    let (p, q, r) = corridor();
-    let (a, c, d) = open();
-    let bad = fix(p, q, r, &tune()).strain;
-    let good = fix(a, c, d, &tune()).strain;
-
-    let settle = |strain: f64| {
+    let settle = |w: &Refs| {
         let mut s = Soma::fresh();
         let mut ch = Choir::new(0, &tune());
-        s.tick(strain, &[], 1.0, &mut ch, &tune());
+        // Settled first, so the change is a change.
+        for _ in 0..50 {
+            s.tick(w, 0.9, &mut ch, &tune());
+        }
+        // Then his footing goes, over a second, and stays gone.
+        for k in 0..10 {
+            s.tick(w, 0.9 - 0.06 * k as f64, &mut ch, &tune());
+        }
         let raised = s.concern;
-        for _ in 0..600 {
-            s.tick(strain, &[], 0.0, &mut ch, &tune());
+        for _ in 0..900 {
+            s.tick(w, 0.3, &mut ch, &tune());
         }
         (raised, s.concern, s.arousal)
     };
-    let (r0, open_left, open_arousal) = settle(good);
-    let (r1, tight_left, tight_arousal) = settle(bad);
+    let (r0, open_left, open_arousal) = settle(&world(0.0));
+    let (r1, tight_left, tight_arousal) = settle(&world(-1.0));
 
-    assert!(r0 > 0.0 && (r0 - r1).abs() < 1e-9, "both men were told the same thing");
+    assert!(r0 > 0.0 && r1 > 0.0, "the same loss of footing worried both men");
     assert!(open_left < tight_left, "a readable room settles a question");
     assert!(open_arousal < tight_arousal, "and an unsettled question is what costs him");
 }
 
 #[test]
 fn arousal_opens_the_border_and_load_stiffens_it() {
-    let calm = Soma { arousal: 0.0, load: 0.0, concern: 0.0, numb: false };
-    let scared = Soma { arousal: 4.0, load: 0.0, concern: 0.0, numb: false };
-    let scared_and_battered = Soma { arousal: 4.0, load: 8.0, concern: 0.0, numb: false };
+    let calm = Soma { arousal: 0.0, load: 0.0, last: -1.0, drift: 0.0, concern: 0.0, numb: false };
+    let scared = Soma { arousal: 4.0, load: 0.0, last: -1.0, drift: 0.0, concern: 0.0, numb: false };
+    let scared_and_battered = Soma { arousal: 4.0, load: 8.0, last: -1.0, drift: 0.0, concern: 0.0, numb: false };
     // Arousal makes being away cheap; load makes it dear. The frightened
     // man's border reaches further out, the battered one's pulls back in.
     assert!(scared.away_cost(&tune()) < calm.away_cost(&tune()));
@@ -112,8 +127,8 @@ fn arousal_opens_the_border_and_load_stiffens_it() {
 /// is why nothing brings him back.
 #[test]
 fn the_numb_pay_nothing_to_be_anywhere() {
-    let calm = Soma { arousal: 0.0, load: 0.0, concern: 0.0, numb: false };
-    let numb = Soma { arousal: 0.0, load: LOAD_MAX, concern: 0.0, numb: true };
+    let calm = Soma { arousal: 0.0, load: 0.0, last: -1.0, drift: 0.0, concern: 0.0, numb: false };
+    let numb = Soma { arousal: 0.0, load: LOAD_MAX, last: -1.0, drift: 0.0, concern: 0.0, numb: true };
     assert!(calm.away_cost(&tune()) > 0.0);
     assert_eq!(numb.away_cost(&tune()), 0.0);
 }
@@ -122,7 +137,7 @@ fn the_numb_pay_nothing_to_be_anywhere() {
 fn a_man_alone_does_not_come_back() {
     let mut s = Soma::battered(6.0);
     let mut choir = Choir::new(0, &tune());
-    let load = run(&mut s, &mut choir, STRAIN_REST, 600);
+    let load = run(&mut s, &mut choir, &easy(), 600);
     assert!(load.windows(2).all(|w| w[1] >= w[0]), "no bath, so nothing may drain");
 }
 
@@ -130,11 +145,11 @@ fn a_man_alone_does_not_come_back() {
 fn the_choir_sings_him_down() {
     let mut alone = Soma::battered(6.0);
     let mut none = Choir::new(0, &tune());
-    run(&mut alone, &mut none, STRAIN_REST, 600);
+    run(&mut alone, &mut none, &easy(), 600);
 
     let mut formed = Soma::battered(6.0);
     let mut many = Choir::new(12, &tune());
-    run(&mut formed, &mut many, STRAIN_REST, 600);
+    run(&mut formed, &mut many, &easy(), 600);
 
     assert!(formed.load < alone.load);
     assert!(formed.load < 6.0, "a formation should actually drain him");
@@ -160,11 +175,11 @@ fn a_small_remnant_hands_it_back_and_a_formation_does_not() {
 
     let mut remnant = Soma::battered(6.0);
     let mut small = Choir::new(2, &tune());
-    let thin = run(&mut remnant, &mut small, STRAIN_REST, 1200);
+    let thin = run(&mut remnant, &mut small, &easy(), 1200);
 
     let mut company = Soma::battered(6.0);
     let mut wide = Choir::new(12, &tune());
-    let full = run(&mut company, &mut wide, STRAIN_REST, 1200);
+    let full = run(&mut company, &mut wide, &easy(), 1200);
 
     assert!(!small.wide() && wide.wide());
     assert!(rebound_after_trough(&thin) > 1.0, "the remnant must ring");
@@ -175,14 +190,12 @@ fn a_small_remnant_hands_it_back_and_a_formation_does_not() {
 #[test]
 fn the_same_setup_runs_the_same_way_twice() {
     let go = || {
-        let (p, q, r) = corridor();
-        let strain = fix(p, q, r, &tune()).strain;
+        let w = tight();
         let mut s = Soma::fresh();
         let mut c = Choir::new(2, &tune());
         (0..400)
             .map(|t| {
-                let ev: &[Impact] = if t == 100 { &[Impact::new(1.0, 1.0)] } else { &[] };
-                s.tick(strain, ev, 0.0, &mut c, &tune());
+                s.tick(&w.0, w.1, &mut c, &tune());
                 (s.arousal.to_bits(), s.load.to_bits())
             })
             .collect::<Vec<_>>()
@@ -193,9 +206,9 @@ fn the_same_setup_runs_the_same_way_twice() {
 
 #[test]
 fn fright_costs_a_man_the_song() {
-    let calm = Soma { arousal: 0.0, load: 0.0, concern: 0.0, numb: false };
-    let scared = Soma { arousal: 5.0, load: 0.0, concern: 0.0, numb: false };
-    let numb = Soma { arousal: 5.0, load: LOAD_MAX, concern: 0.0, numb: true };
+    let calm = Soma { arousal: 0.0, load: 0.0, last: -1.0, drift: 0.0, concern: 0.0, numb: false };
+    let scared = Soma { arousal: 5.0, load: 0.0, last: -1.0, drift: 0.0, concern: 0.0, numb: false };
+    let numb = Soma { arousal: 5.0, load: LOAD_MAX, last: -1.0, drift: 0.0, concern: 0.0, numb: true };
     assert!(scared.hold(0.8, &tune()) < calm.hold(0.8, &tune()));
     assert_eq!(numb.hold(0.8, &tune()), 0.0);
 }
@@ -286,10 +299,10 @@ fn the_anchor_generalises_to_one_more_reference() {
 /// caller does everything else.
 #[test]
 fn what_being_away_costs_moves_the_way_the_rulings_say() {
-    let calm = Soma { arousal: 0.0, load: 0.0, concern: 0.0, numb: false };
-    let frightened = Soma { arousal: 6.0, load: 0.0, concern: 1.0, numb: false };
-    let battered = Soma { arousal: 0.0, load: 8.0, concern: 0.0, numb: false };
-    let both = Soma { arousal: 6.0, load: 8.0, concern: 1.0, numb: false };
+    let calm = Soma { arousal: 0.0, load: 0.0, last: -1.0, drift: 0.0, concern: 0.0, numb: false };
+    let frightened = Soma { arousal: 6.0, load: 0.0, last: -1.0, drift: 0.0, concern: 1.0, numb: false };
+    let battered = Soma { arousal: 0.0, load: 8.0, last: -1.0, drift: 0.0, concern: 0.0, numb: false };
+    let both = Soma { arousal: 6.0, load: 8.0, last: -1.0, drift: 0.0, concern: 1.0, numb: false };
 
     assert!(frightened.away_cost(&tune()) < calm.away_cost(&tune()),
         "arousal dissolves the fence, so being away gets cheaper");
@@ -306,7 +319,7 @@ fn what_being_away_costs_moves_the_way_the_rulings_say() {
 /// nobody authors it.
 #[test]
 fn the_border_takes_the_shape_of_whatever_carries_belonging() {
-    let man = Soma { arousal: 1.0, load: 0.0, concern: 1.0, numb: false };
+    let man = Soma { arousal: 1.0, load: 0.0, last: -1.0, drift: 0.0, concern: 1.0, numb: false };
     let cost = man.away_cost(&tune());
     let reach = |carry: f64| {
         let mut x = 0.0f64;
@@ -328,7 +341,7 @@ fn the_border_takes_the_shape_of_whatever_carries_belonging() {
 #[test]
 fn concern_is_compressed_above_the_knee_and_untouched_below() {
     let t = tune();
-    let felt = |c: f64| Soma { arousal: 0.0, load: 0.0, concern: c, numb: false }.felt(&t);
+    let felt = |c: f64| Soma { arousal: 0.0, load: 0.0, last: -1.0, drift: 0.0, concern: c, numb: false }.felt(&t);
 
     // untouched below the knee
     assert!((felt(t.concern_knee * 0.5) - t.concern_knee * 0.5).abs() < 1e-12);
@@ -350,4 +363,46 @@ fn concern_is_compressed_above_the_knee_and_untouched_below() {
     let first = felt(0.5) - felt(0.0);
     let ninth = felt(9.0) - felt(8.5);
     assert!(first > 3.0 * ninth, "piling worries on must give diminishing returns");
+}
+
+/// Who wins a fight is what the two men brought to it, and nothing else.
+#[test]
+fn a_fight_is_decided_by_what_each_man_is_putting_into_it() {
+    let t = tune();
+    let mates = Choir::new(8, &t);
+    let alone = Choir::new(0, &t);
+    let calm = Soma::fresh();
+    let roused = Soma { arousal: 5.0, ..Soma::fresh() };
+    let spent = Soma { arousal: 5.0, load: 9.0, ..Soma::fresh() };
+    let gone = Soma { numb: true, load: LOAD_MAX, ..Soma::fresh() };
+
+    // A man who has stopped weighing his options beats one who has not.
+    assert_eq!(contest((&roused, &mates), (&calm, &mates), &t), Contest::First);
+    // The day catches up with him: same fright, less of him arrives.
+    assert_eq!(contest((&roused, &mates), (&spent, &mates), &t), Contest::First);
+    // And the man with nothing left to weigh is the fastest thing there is.
+    assert_eq!(contest((&gone, &alone), (&roused, &mates), &t), Contest::First);
+    assert!(gone.commitment(&t) > roused.commitment(&t));
+
+    // Mutual death survives as the degenerate case and nothing more.
+    assert_eq!(contest((&calm, &mates), (&calm, &mates), &t), Contest::Both);
+    assert_eq!(contest((&roused, &mates), (&roused, &mates), &t), Contest::Both);
+}
+
+/// The dial is the proved one: descent rate is cos(theta), circulation at
+/// PI/2 conserves the potential, and a man arrives in proportion to how
+/// little he is still weighing.
+#[test]
+fn the_dial_runs_from_circling_to_arriving() {
+    let t = tune();
+    assert!((Soma::fresh().dial(&t) - HALF_PI).abs() < 1e-12);
+    assert!(Soma::fresh().commitment(&t).abs() < 1e-12);
+    let mut last = -1.0;
+    for a in 0..60 {
+        let m = Soma { arousal: a as f64 * 0.5, ..Soma::fresh() };
+        let c = m.commitment(&t);
+        assert!(c > last);
+        last = c;
+    }
+    assert!(last < 1.0, "no man is ever quite all the way in");
 }

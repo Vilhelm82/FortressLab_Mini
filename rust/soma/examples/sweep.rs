@@ -32,33 +32,34 @@ const LONE_CORRIDOR_SURVIVES: f64 = 20.0;
 /// of quiet.
 const CHOIR_MENDS_HALF_IN: f64 = 60.0;
 
-fn bear(x: f64, y: f64, z: f64) -> Bearing {
-    bearing(x, y, z).unwrap()
+fn room(pair: f64, hold: f64) -> (Refs, f64) {
+    let mut r = Refs::new(2);
+    r.set(0, 1, pair);
+    (r, hold)
 }
 
-/// Post behind, threat ahead, no anchor worth the name.
-fn corridor_strain(t: &Tuning) -> f64 {
-    let post = bear(-1.0, 0.0, 0.0);
-    fix(post, anchor(post, 0.15), bear(1.0, 0.0, 0.0), t).strain
+/// Two references dead against each other and nothing much to anchor on:
+/// a place a man cannot settle a question in.
+fn tight_room() -> (Refs, f64) {
+    room(-1.0, 0.05)
 }
 
-/// Open ground, a good hold on the song, threat off to one side.
-fn open_strain(t: &Tuning) -> f64 {
-    let post = bear(-1.0, 0.0, 0.0);
-    fix(post, anchor(post, 0.85), bear(0.3, -0.95, 0.0), t).strain
+/// References well apart and a firm hold on where he is.
+fn open_room() -> (Refs, f64) {
+    room(0.0, 0.9)
 }
 
 /// Seconds until the latch, if it ever trips.
 /// A man who has been TOLD something got inside, and is now standing there
 /// trying to place it. Geometry alone frightens nobody — the alert is the
 /// thing the corridor is allowed to work on.
-fn seconds_to_break(strain: f64, allies: usize, t: &Tuning, limit: f64) -> Option<f64> {
+fn seconds_to_break(w: &(Refs, f64), allies: usize, t: &Tuning, limit: f64) -> Option<f64> {
     let mut s = Soma::fresh();
     s.concern = 1.0;
     let mut c = Choir::new(allies, t);
     let n = (limit / TICK_SECONDS) as usize;
     for i in 0..n {
-        s.tick(strain, &[], 0.0, &mut c, t);
+        s.tick(&w.0, w.1, &mut c, t);
         if s.numb {
             return Some(i as f64 * TICK_SECONDS);
         }
@@ -71,7 +72,7 @@ fn load_after(start: f64, allies: usize, secs: f64, t: &Tuning) -> f64 {
     let mut s = Soma::battered(start);
     let mut c = Choir::new(allies, t);
     for _ in 0..((secs / TICK_SECONDS) as usize) {
-        s.tick(t.strain_rest, &[], 0.0, &mut c, t);
+        s.tick(&open_room().0, open_room().1, &mut c, t);
     }
     s.load
 }
@@ -79,17 +80,17 @@ fn load_after(start: f64, allies: usize, secs: f64, t: &Tuning) -> f64 {
 /// Every target, scored independently so a failure names itself.
 fn score(t: &Tuning) -> (usize, Vec<&'static str>) {
     let mut failed = Vec::new();
-    let corridor = corridor_strain(t);
-    let open = open_strain(t);
+    let corridor = tight_room();
+    let open = open_room();
 
-    if seconds_to_break(open, 8, t, OPEN_GROUND_HOLDS_FOR).is_some() {
+    if seconds_to_break(&open, 8, t, OPEN_GROUND_HOLDS_FOR).is_some() {
         failed.push("open ground breaks a formed man");
     }
-    match seconds_to_break(corridor, 8, t, FORMED_CORRIDOR_HOLDS * 3.0) {
+    match seconds_to_break(&corridor, 8, t, FORMED_CORRIDOR_HOLDS * 3.0) {
         Some(s) if s < FORMED_CORRIDOR_HOLDS => failed.push("formed company folds too fast"),
         _ => {}
     }
-    match seconds_to_break(corridor, 0, t, LONE_CORRIDOR_BREAKS_BY * 4.0) {
+    match seconds_to_break(&corridor, 0, t, LONE_CORRIDOR_BREAKS_BY * 4.0) {
         None => failed.push("lone man never breaks"),
         Some(s) if s > LONE_CORRIDOR_BREAKS_BY => failed.push("lone man takes too long"),
         Some(s) if s < LONE_CORRIDOR_SURVIVES => failed.push("lone man breaks instantly"),
@@ -157,8 +158,6 @@ fn main() {
     let base = Tuning::default();
     let (s0, why0) = score(&base);
     println!("=== TODAY'S CONSTANTS ===");
-    println!("  corridor strain {:.1}   open strain {:.2}",
-        corridor_strain(&base), open_strain(&base));
     println!("  targets met: {}/5", s0);
     for w in &why0 {
         println!("    FAILS: {w}");

@@ -6,7 +6,7 @@
 //! stays a general model.
 
 use crate::field::Note;
-use soma::{Impact, Tuning};
+use soma::Tuning;
 
 /// How much of his own song a man can still hear, from nothing to all of it.
 ///
@@ -41,37 +41,3 @@ pub fn fidelity(
     }
 }
 
-
-// --- what happens to a man in a siege ---------------------------------
-//
-// soma has no idea what any of these are. It is handed a shock and a
-// question; naming the things that produce them is this game's job.
-
-/// A hostile came inside two cells and left again. Small shock, large
-/// question — whatever nearly had him is still out there somewhere.
-pub fn near_miss() -> Impact {
-    Impact::new(1.0, 1.0)
-}
-
-/// A man he was singing with went silent within hearing.
-pub fn ally_death() -> Impact {
-    Impact::new(2.0, 1.2)
-}
-
-/// His own order lost a tier under cancellation — he is being unmade and
-/// cannot see by what.
-pub fn chord_fracture() -> Impact {
-    Impact::new(1.5, 0.6)
-}
-
-/// A tick spent at the edge of reach. Shock with no question in it: there
-/// is nothing unclear about the man in front of you.
-pub fn melee() -> Impact {
-    Impact::shock(0.3)
-}
-
-/// He won a contact. A real shock that settles a question rather than
-/// raising one.
-pub fn kill_delivered() -> Impact {
-    Impact::new(0.8, -0.8)
-}

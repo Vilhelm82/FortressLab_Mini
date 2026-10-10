@@ -106,29 +106,20 @@ fn main() {
 
         // Contact. Nothing here tells him to hold off, so reaching the man
         // IS the fight.
-        let mut hit: Vec<Impact> = Vec::new();
         if alive && (e - x).abs() <= 0.25 {
             alive = false;
             killed_at = t;
-            hit.push(Impact::new(0.8, -0.8));
         }
 
-        // what he can still hear of his post is his hold on where he is
-        let held = m.hold(w.belonging(x), &tune());
-        let mut r = Refs::new(2);
-        r.set(0, 1, -1.0);
-        let strain = r.with_anchor(held, 0).fix(&tune()).strain;
-
-        // The enemy worries him only in proportion to how badly he can
-        // place it. A man looking straight at the thing has a target, not a
-        // question — so what winds him up is being far enough out that his
-        // own post has stopped telling him where he is.
-        let alert = if alive {
-            w.interference(x, e) * m.unresolved(strain, &tune()) * 0.04
-        } else {
-            0.0
-        };
-        m.tick(strain, &hit, alert, &mut choir, &tune());
+        // What he has to read the situation from. On a line there are two
+        // directions and nothing else, so his post behind him and the thing
+        // ahead of him say exactly opposite things and pin nothing between
+        // them — which is why what he can still hear of his post is the
+        // only reference doing any work.
+        let mut world = Refs::new(2);
+        world.set(0, 1, -1.0);
+        let offered = w.belonging(x);
+        m.tick(&world, offered, &mut choir, &tune());
 
         if t % 100 == 0 || t == 999 || t == killed_at && killed_at > 0 {
             println!("  {:>5} {:>7} {:>8.3} {:>8.3} {:>8.3} {:>8.3}  {}",

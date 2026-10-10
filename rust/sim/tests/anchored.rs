@@ -50,14 +50,13 @@ fn a_choir_lets_a_man_survive_a_thinner_hold_on_the_song() {
         let threat = b(0.6, -0.8, 0.0);
         let mut s = Soma::fresh();
         let mut c = Choir::new(allies, &tune());
-        for t in 0..900 {
-            let strain = fix(post, anchor(post, s.hold(offered, &tune())), threat, &tune()).strain;
-            let ev: &[Impact] = if t == 100 { &[fortress_sim::anchor::ally_death()] } else { &[] };
-            // There is a fight going on around him: a standing reason to
-            // worry, topped up faster than he can settle it. Without that
-            // the geometry is worth nothing and nobody breaks — which is
-            // the whole point of concern being a separate quantity.
-            s.tick(strain, ev, 0.02, &mut c, &tune());
+        // His footing goes, slowly and without stopping — walking further
+        // from his post, or the song around him thinning. Nothing is
+        // injected: a worry IS a change in what he can read.
+        let world = Refs::from_bearings(&[post, threat]);
+        for k in 0..900 {
+            let fading = offered * (1.0 - k as f64 / 1200.0);
+            s.tick(&world, fading, &mut c, &tune());
         }
         s.numb
     }

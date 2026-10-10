@@ -62,6 +62,9 @@ pub mod tuning {
         pub fidelity_half: f64,
         pub fidelity_ceil: f64,
         pub attention_cost: f64,
+        pub contest_tie: f64,
+        pub hiss: f64,
+        pub tau_drift: f64,
         pub tau_concern: f64,
         pub concern_max: f64,
         pub concern_knee: f64,
@@ -91,6 +94,9 @@ pub mod tuning {
                 fidelity_half: FIDELITY_HALF,
                 fidelity_ceil: FIDELITY_CEIL,
                 attention_cost: ATTENTION_COST,
+                contest_tie: CONTEST_TIE,
+                hiss: HISS,
+                tau_drift: TAU_DRIFT,
                 tau_concern: TAU_CONCERN,
                 concern_max: CONCERN_MAX,
                 concern_knee: CONCERN_KNEE,
@@ -168,6 +174,8 @@ pub mod tuning {
     /// Floor on the determinant so a perfectly degenerate frame is merely
     /// very bad rather than infinite.
     pub const DEGENERACY_FLOOR: f64 = 1e-6;
+    /// A quarter turn: the whole range of the dial.
+    pub const HALF_PI: f64 = std::f64::consts::FRAC_PI_2;
 
     /// Amplitude at which a band counts half toward fidelity. Hearing a
     /// note at all is most of the value; hearing it loudly adds little.
@@ -185,6 +193,19 @@ pub mod tuning {
     /// Where he cannot read the room it does not die at all — that factor
     /// is what a corridor is worth, and it is worth nothing on its own.
     pub const TAU_CONCERN: f64 = 25.0;
+    /// Loudness of the fluctuation that comes with dissipating. The one
+    /// freedom section 8 leaves open once the identity is imposed.
+    pub const HISS: f64 = 1.0;
+
+    /// How close two men's commitment must be for them to arrive together
+    /// and take each other. The dead short: the tie the design makes
+    /// expensive, reached by coincidence rather than by rule.
+    pub const CONTEST_TIE: f64 = 0.02;
+
+    /// How fast a man gets used to a rate of change. Slower than this and
+    /// it stops being a shock and becomes the way things are.
+    pub const TAU_DRIFT: f64 = 2.0;
+
     /// The ceiling. A true limiter and a long way up — the compressor below
     /// should be doing the work long before anything reaches this.
     pub const CONCERN_MAX: f64 = 12.0;
@@ -379,43 +400,42 @@ impl Refs {
     }
 }
 
+/// What happened when two men reached each other.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum Contest {
+    /// The first man is standing.
+    First,
+    /// The second is.
+    Second,
+    /// Neither. They arrived together and took each other.
+    Both,
+}
+
+/// Who wins when two men meet.
+///
+/// Nothing here is about equipment, stats or dice, because there are none
+/// of any. What separates them is everything each man brought with him —
+/// see `Soma::brings`, which is where the whole of his state lands on a
+/// single fight.
+///
+/// Mutual death is not the rule, it is the DEGENERATE case: two men equally
+/// committed arrive together and take each other. That is the dead short,
+/// `R -> 0`, the tie the whole design exists to make expensive — and it now
+/// happens because two states coincided rather than because a rule said so.
+pub fn contest(a: (&Soma, &Choir), b: (&Soma, &Choir), t: &Tuning) -> Contest {
+    let (x, y) = (a.0.brings(a.1, t), b.0.brings(b.1, t));
+    if (x - y).abs() <= t.contest_tie {
+        Contest::Both
+    } else if x > y {
+        Contest::First
+    } else {
+        Contest::Second
+    }
+}
+
 /// Read the fix from three bearings — the spatial convenience.
 pub fn fix(a: Bearing, b: Bearing, c: Bearing, t: &Tuning) -> Fix {
     Refs::from_bearings(&[a, b, c]).fix(t)
-}
-
-/// Something that happened to him, as opposed to something he is enduring.
-///
-/// Two numbers, and no idea what the event was. A general model has no
-/// business knowing what a chord is or what a sergeant is — a game names
-/// its own events and says what shape they are.
-///
-/// The two are independent and that independence is the point. A near miss
-/// is a small shock and a large question: the thing that nearly had you is
-/// still out there. Winning a fight is the opposite — a real shock that
-/// ANSWERS one, so its question is negative. Grinding away in contact is
-/// shock with no question at all, because nothing about it is unclear.
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Impact {
-    /// How hard it lands on him now.
-    pub shock: f64,
-    /// How much more reason it gives him to think something is still out
-    /// there. Negative for anything that settles a question.
-    pub question: f64,
-}
-
-impl Impact {
-    pub fn new(shock: f64, question: f64) -> Impact {
-        Impact { shock, question }
-    }
-    /// Something happened and told him nothing.
-    pub fn shock(shock: f64) -> Impact {
-        Impact { shock, question: 0.0 }
-    }
-    /// He learned something was out there without being touched by it.
-    pub fn question(question: f64) -> Impact {
-        Impact { shock: 0.0, question }
-    }
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
@@ -487,6 +507,19 @@ impl Choir {
         self.t.bath_coupling * returned
     }
 
+    /// How fast load is leaving him right now, without advancing anything.
+    /// The dissipation half of the fluctuation-dissipation identity, which
+    /// is also the size of his hiss.
+    pub fn drain_rate(&self, load: f64) -> f64 {
+        if self.allies == 0 {
+            return 0.0;
+        }
+        if self.wide() {
+            return load / (self.t.tau_choir * self.t.choir_ref / (self.allies as f64));
+        }
+        self.t.bath_coupling * self.modes.iter().map(|m| m.stored).sum::<f64>()
+    }
+
     /// Rough first revival, seconds — the period on which a small bath
     /// hands back what it took. Undefined for a wide bath, which never
     /// does.
@@ -506,6 +539,12 @@ pub struct Soma {
     pub arousal: f64,
     /// The slow bucket. What the day has cost him.
     pub load: f64,
+    /// How well he could read things last tick, so the change can be seen.
+    /// Negative means nothing has happened yet.
+    pub last: f64,
+    /// What rate of change he has got used to. Only what outruns this is a
+    /// shock.
+    pub drift: f64,
     /// Something is out there and he has not accounted for it.
     ///
     /// Bad geometry is not itself frightening. A man with nothing on his
@@ -523,7 +562,7 @@ pub struct Soma {
 
 impl Default for Soma {
     fn default() -> Self {
-        Soma { arousal: 0.0, load: 0.0, concern: 0.0, numb: false }
+        Soma { arousal: 0.0, load: 0.0, last: -1.0, drift: 0.0, concern: 0.0, numb: false }
     }
 }
 
@@ -546,7 +585,7 @@ impl Soma {
 
     /// A man who has been through it. For scenarios that need one.
     pub fn battered(load: f64) -> Soma {
-        Soma { arousal: 0.0, load, concern: 0.0, numb: false }
+        Soma { arousal: 0.0, load, last: -1.0, drift: 0.0, concern: 0.0, numb: false }
     }
 
     /// What he is actually acting on, after the compressor.
@@ -569,6 +608,65 @@ impl Soma {
     /// How badly he can resolve what he is worried about, 0 to 1.
     pub fn unresolved(&self, strain: f64, t: &Tuning) -> f64 {
         dread(strain, t) / t.suspense_gain
+    }
+
+    /// The dial, in radians. Proved: Seated Root section 3.
+    ///
+    /// Reversible circulation and dissipative settling are driven by the
+    /// SAME potential and differ by a quarter turn of the generator —
+    /// `x' = -e^(J.theta) grad V`, with descent rate `cos(theta)`. So one
+    /// number covers the whole range of how a man engages with what is in
+    /// front of him, and the range is continuous rather than three modes.
+    ///
+    /// At `PI/2` he conserves the potential exactly: circling, weighing,
+    /// committing to nothing. In between the modes carry complex
+    /// frequency — oscillation with decay, which is weaving, feinting,
+    /// hesitating. At `0` it is pure descent and he simply goes.
+    ///
+    /// Arousal turns it toward commitment. Load turns it back, because a
+    /// man who has already spent the day is slower to throw himself at
+    /// anything.
+    pub fn dial(&self, t: &Tuning) -> f64 {
+        if self.numb {
+            return 0.0;
+        }
+        let held_back = 1.0 + t.fence_load * (self.load / t.load_max);
+        HALF_PI / (1.0 + self.arousal / (t.arousal_scale * held_back))
+    }
+
+    /// How much of himself he is actually putting into it: `cos` of the
+    /// dial, which section 3 proves is the descent rate. Zero is a man
+    /// going round in circles; one is a man arriving.
+    pub fn commitment(&self, t: &Tuning) -> f64 {
+        self.dial(t).cos()
+    }
+
+    /// What a man brings to a fight: all of him, at once.
+    ///
+    /// Three things that are already derived elsewhere, and they pull
+    /// against each other rather than stacking.
+    ///
+    /// **Commitment** — `cos(theta)`, the proved descent rate. Fright turns
+    /// it toward arriving; the day's load turns it back.
+    ///
+    /// **What he is still carrying.** A man with unanswered questions is
+    /// not entirely here. Read after the compressor, because the ninth
+    /// unanswered thing costs him almost nothing more than the eighth.
+    ///
+    /// **The hiss.** Section 8's fluctuation-dissipation identity: a seat
+    /// that drinks must hiss, damping kernel and noise carrying the same
+    /// coefficients. The bath that steadies a man is the same bath that
+    /// makes his hands shake, so the choir cannot be all upside. And a man
+    /// with no bath at all — the isolated, the numb — does not shake,
+    /// because there is no channel to fluctuate through. Nothing here is
+    /// tuned: the hiss is whatever his drain is.
+    ///
+    /// COMPOSITION IS CLAUDE'S. The three factors are each derived; that
+    /// they multiply is a guess and the obvious thing to argue with.
+    pub fn brings(&self, choir: &Choir, t: &Tuning) -> f64 {
+        let carried = 1.0 - (self.felt(t) / t.concern_max).min(1.0);
+        let hiss = (t.hiss * (self.load / t.load_max) * choir.drain_rate(self.load).abs()).sqrt();
+        self.commitment(t) * carried / (1.0 + hiss)
     }
 
     /// What being away from where he belongs costs him, right now.
@@ -631,32 +729,45 @@ impl Soma {
     /// unlike the impacts, which are things that actually happened. The
     /// still corridor supplies the first and none of the second, which is
     /// the whole point of it.
-    pub fn tick(
-        &mut self,
-        strain: f64,
-        impacts: &[Impact],
-        alert: f64,
-        choir: &mut Choir,
-        t: &Tuning,
-    ) {
+    /// One tick.
+    ///
+    /// `world` is what he has to read the situation from and how much those
+    /// sources duplicate each other. `offered` is how firmly the place he
+    /// belongs is still telling him where he is, from 0 to 1. Both are the
+    /// caller's, and both are about the world rather than about him.
+    ///
+    /// soma applies his own state to them, because the moment a caller does
+    /// that itself the arithmetic below reads his state back as though the
+    /// world had moved — and a man who is shaken by his own fright is a
+    /// man who runs away with himself in about four seconds. Measured.
+    pub fn tick(&mut self, world: &Refs, offered: f64, choir: &mut Choir, t: &Tuning) {
         let dt = TICK_SECONDS;
 
-        // What is out there that he has not accounted for. Alerts and the
-        // events that raise questions put it up; a kill answers one.
-        let raised: f64 = alert + impacts.iter().map(|i| i.question).sum::<f64>();
-        // He settles a question at a rate set by how well he can see. In an
-        // open room a worry dies on its own; in a corridor it will not, and
-        // that is the whole of what the corridor does to him.
-        let unresolved = self.unresolved(strain, t);
-        self.concern += dt * (raised / dt - self.concern * (1.0 - unresolved) / t.tau_concern);
+        // What the world is doing, with none of him in it. This is the only
+        // thing allowed to count as something happening.
+        let out_there = (1.0 + world.with_anchor(offered, 0).fix(t).strain / t.strain_rest).ln();
+
+        // And what he actually has to stand on, which is that seen through
+        // whatever the somatic layer is currently taking.
+        let held = self.hold(offered, t);
+        let strain = world.with_anchor(held, 0).fix(t).strain;
+
+        // Everything that happens to a man is one axis: what it did to how
+        // well the situation can be read. No catalogue of events, nothing
+        // to author. The size of the change is the jolt, its direction is
+        // whether he has been handed a question or an answer.
+        let delta = if self.last < 0.0 { 0.0 } else { out_there - self.last };
+        self.last = out_there;
+
+        self.concern += dt * (delta / dt - self.concern * (1.0 - self.unresolved(strain, t)) / t.tau_concern);
         self.concern = self.concern.clamp(0.0, t.concern_max);
 
-        // Sensitisation is a startle threshold: it sharpens what HAPPENS to
-        // him, not the chronic weight of a bad room. A battered man jumps at
-        // timber creaks — a creak is an event. Dread is not.
-        let suspense = self.felt(t) * dread(strain, t);
-        let events: f64 = impacts.iter().map(|i| i.shock).sum();
-        let input = suspense + self.sensitivity(t) * events / dt;
+        // A man moving about changes what he can read continuously, and
+        // that is not a shock. Only the part that outruns what he has got
+        // used to is: sudden is what makes a thing a shock, not large.
+        self.drift += dt * (delta / dt - self.drift) / t.tau_drift;
+        let jolt = self.sensitivity(t) * (delta / dt - self.drift).abs();
+        let input = self.felt(t) * dread(strain, t) + jolt;
 
         let tau = t.tau_arousal * (1.0 + t.beta * self.load / t.load_max);
         self.arousal += dt * (input - self.arousal / tau);

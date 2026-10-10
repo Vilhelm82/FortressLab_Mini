@@ -73,11 +73,8 @@ fn anchored(steps_from_post: i32, allies: usize, shock: usize) -> Vec<(usize, f6
     let mut choir = Choir::new(allies, &tune());
     let mut out = Vec::new();
     for t in 0..600 {
-        let held = s.hold(offered, &tune());
-        let strain = fix(b_post, anchor(b_post, held), b_threat, &tune()).strain;
-        let impacts: &[Impact] = if t == shock { &[fortress_sim::anchor::ally_death()] } else { &[] };
-        s.tick(strain, impacts, 0.0, &mut choir, &tune());
-        out.push((t, held, strain, s.arousal, s.load, s.numb));
+        s.tick(&Refs::from_bearings(&[b_post, b_threat]), offered, &mut choir, &tune());
+        out.push((t, s.hold(offered, &tune()), s.commitment(&tune()), s.arousal, s.load, s.numb));
     }
     out
 }
@@ -134,12 +131,9 @@ fn sergeant_drops(steps: i32) -> (usize, f64, f64, f64, bool) {
             }
         }
         let offered = fidelity(&heard, &wandering.notes, &tune());
-        let held = s.hold(offered, &tune());
-        let strain = fix(b_post, anchor(b_post, held), b_threat, &tune()).strain;
-        let ev: &[Impact] = if t == 100 { &[fortress_sim::anchor::ally_death()] } else { &[] };
-        s.tick(strain, ev, 0.0, &mut choir, &tune());
+        s.tick(&Refs::from_bearings(&[b_post, b_threat]), offered, &mut choir, &tune());
         if s.numb {
-            return (promotions, held, strain, t as f64, true);
+            return (promotions, s.hold(offered, &tune()), s.commitment(&tune()), t as f64, true);
         }
     }
     let last = fidelity(&without.hear(me), &wandering.notes, &tune());
