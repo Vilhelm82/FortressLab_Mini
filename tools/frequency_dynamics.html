@@ -87,7 +87,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
 .hint { color: var(--muted); font-size: 12px; margin: 0; }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
 .sw-leaf { background: var(--calm); height: 10px; width: 10px; border-radius: 50% 0; }
-#sound[aria-pressed="true"] { border-color: var(--calm); color: var(--calm); }
+#sound[aria-pressed="true"], #cw[aria-pressed="true"] { border-color: var(--calm); color: var(--calm); }
 .chordv { font-family: var(--font-data); font-size: 12px; color: var(--calm); min-height: 1.4em; }
 </style>
 
@@ -113,6 +113,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
           <button id="v-colour" aria-pressed="false">Wave colours</button>
         </div>
         <span class="spacer"></span>
+        <button id="cw" aria-pressed="false">Colour waves</button>
         <button id="sound" aria-pressed="false">Sound on</button>
         <button id="run">Pause</button>
         <button id="reset">Reset waves</button>
@@ -471,6 +472,28 @@ table.mx th { color: var(--muted); font-weight: 500; }
   const mix = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
   const rgb = c => `rgb(${c.map(Math.round)})`;
 
+  // the colour of the wave of this layer passing through a cell right now, from its source's colour cycle
+  function waveColour(L, i) {
+    const x = i % W, y = (i / W) | 0, src = L.src, u = L.u[i];
+    const geo = L.omega * t - (L.omega / WAVE_C) * Math.hypot(x - src.x, y - src.y);
+    const psi = Math.atan2(u, (u - L.up[i]) / L.omega);
+    let d = (psi - geo) % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI;
+    const n = Math.round((geo + d - Math.PI / 2) / (2 * Math.PI));
+    const look = lookOf(src); return look.rgb[((n % look.len) + look.len) % look.len];
+  }
+  // a weighted blend of the wave colours in a cell; falls back to the view's own colour where nothing is there
+  function blendWaves(i, weight, fallback) {
+    let r = 0, g = 0, b = 0, ws = 0;
+    for (const L of layers.values()) {
+      if (L.src.muted) continue;
+      const w = weight(L); if (!(w > 0)) continue;
+      const col = waveColour(L, i); r += w * col[0]; g += w * col[1]; b += w * col[2]; ws += w;
+    }
+    return ws > 0 ? [r / ws, g / ws, b / ws] : fallback;
+  }
+  let colourWaves = false;
+  try { colourWaves = localStorage.getItem('fds-colour-waves') === '1'; } catch (e) {}
+
   function draw() {
     const arr = Ns(), px = img.data;
     let mW = 0, mS = 0, mR = 0, mC = 0;
@@ -506,17 +529,27 @@ table.mx th { color: var(--muted); font-weight: 500; }
         let v = 0; for (const L of layers.values()) v += L.u[i];
         mW = Math.max(mW, Math.abs(v));
         const k = Math.max(-1, Math.min(1, v / gWater));
-        c = mix(COL.deep, COL.crest, 0.5 + 0.5 * k);
+        // with wave colours on, the crest colour is the blend of the waves in this cell, weighted by how hard each is moving it
+        const top = colourWaves ? blendWaves(i, L => Math.abs(L.u[i]), COL.crest) : COL.crest;
+        c = mix(COL.deep, top, 0.5 + 0.5 * k);
       } else {
         const { E, R, clash } = cellRead(i, arr);
         const S = Math.sqrt(E); mS = Math.max(mS, S); mR = Math.max(mR, R);
         if (view === 'harm') {
           const b = Math.min(1, Math.sqrt(S / gS));
           const r = Math.min(1, clash * clash);   // squared, so consonant chords sit calm and only real clashes run hot
-          c = mix(COL.deep, mix(COL.calm, COL.turb, r), b);
+          // with wave colours on, calm water takes the blend of the waves here, weighted by strength; clash still pulls it to turbulence
+          const calm = colourWaves ? blendWaves(i, L => Math.sqrt(2 * L.e[i]), COL.calm) : COL.calm;
+          c = mix(COL.deep, mix(calm, COL.turb, r), b);
         } else {
           const r = Math.min(1, Math.sqrt(R / gR));
-          c = mix(COL.deep, COL.turb, r);
+          // with wave colours on, the churn takes the colours of the waves causing it, each weighted by how much clash it brings
+          const hot = colourWaves ? blendWaves(i, L => {
+            const A = Math.sqrt(2 * L.e[i]); let q = 0;
+            for (const O of layers.values()) if (O !== L && !O.src.muted) q += Math.sqrt(2 * O.e[i]) * D[L.s][O.s];
+            return A * q;
+          }, COL.turb) : COL.turb;
+          c = mix(COL.deep, hot, r);
         }
       }
       const o = i * 4; px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 255;
@@ -780,6 +813,14 @@ table.mx th { color: var(--muted); font-weight: 500; }
     if (!sel) return; const L = lookOf(sel), notesOf = o => o.chord || [o.s], mine = notesOf(sel);
     for (const o of [...posts, ...leaves]) if (o !== sel && notesOf(o).some(n => mine.includes(n))) o.snd.look = { len: L.len, slots: [...L.slots] };
   };
+  // Colour waves: the Water, Harmony and Turbulence views take their colours from each source's wave colours,
+  // each mixing them its own way; off, they look exactly as they always have
+  function setColourWaves(on) {
+    colourWaves = on; $('cw').setAttribute('aria-pressed', on ? 'true' : 'false');
+    try { localStorage.setItem('fds-colour-waves', on ? '1' : '0'); } catch (e) {}
+  }
+  $('cw').onclick = () => setColourWaves(!colourWaves);
+  setColourWaves(colourWaves);
   $('m-ear').onclick = () => setMeasure('ear');
   $('m-wave').onclick = () => setMeasure('wave');
   $('m-vol').oninput = e => { masterVol = +e.target.value / 100; };
