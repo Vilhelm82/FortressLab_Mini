@@ -176,6 +176,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
           <span class="hint" id="lossv">none</span>
         </div>
         <p class="hint">The current runs from clashing water toward water that agrees with a leaf's chord, faster where that changes more steeply, and never faster than the waves themselves travel. A leaf moves at half the current under it. Current scales how hard a slope pushes.</p>
+        <p class="hint">Air loss grows with the square of the frequency, so high notes fade over distance much faster than low ones: B5 loses about 14 times what C4 does. Low notes also bend around walls more, which comes straight out of their longer waves.</p>
         <p class="hint">With a hard edge and no air loss nothing ever leaves the map, so the water keeps filling up. Open edges let it drain out of the world.</p>
       </div>
     </aside>
@@ -247,7 +248,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
       nR[i] = (x < W - 1 && !wall[i + 1]) ? i + 1 : i;
       nU[i] = (y > 0 && !wall[i - W]) ? i - W : i;
       nD[i] = (y < H - 1 && !wall[i + W]) ? i + W : i;
-      let s = air;
+      let s = 0;
       if (edgeOpen) { const d = Math.min(x, y, W - 1 - x, H - 1 - y); if (d < SPONGE) s += SMAX * Math.pow((SPONGE - d) / SPONGE, 2); }
       sigma[i] = s; lv.push(i);
     }
@@ -281,8 +282,10 @@ table.mx th { color: var(--muted); font-weight: 500; }
   function step() {
     for (const L of layers.values()) {
       const u = L.u, up = L.up, un = L.un, e = L.e;
+      // air takes highs far faster than lows: loss grows with the square of the frequency, set relative to A4
+      const airL = air * Math.pow(freqHz(L.s) / 440, 2);
       for (let k = 0; k < live.length; k++) {
-        const i = live[k], s = sigma[i];
+        const i = live[k], s = sigma[i] + airL;
         const lap = u[nL[i]] + u[nR[i]] + u[nU[i]] + u[nD[i]] - 4 * u[i];
         un[i] = (2 * u[i] - (1 - s) * up[i] + C2 * lap) / (1 + s);
       }
@@ -582,7 +585,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
     kappa = 0.5 * Math.pow(1000, +e.target.value / 100);
     document.getElementById('curv').textContent = 'x' + (kappa < 10 ? kappa.toFixed(1) : Math.round(kappa));
   };
-  document.getElementById('loss').oninput = e => { air = +e.target.value * 0.0005; document.getElementById('lossv').textContent = air ? air.toFixed(4) : 'none'; rebuild(); };
+  document.getElementById('loss').oninput = e => { air = +e.target.value * 0.0005; document.getElementById('lossv').textContent = air ? air.toFixed(4) + ' at A4' : 'none'; };
   document.getElementById('load').onclick = () => loadPreset(document.getElementById('preset').value);
 
   // ---------- painting ----------
