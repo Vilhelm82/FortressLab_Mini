@@ -482,7 +482,8 @@ table.mx th { color: var(--muted); font-weight: 500; }
   const ctx = view$.getContext('2d');
   const off = document.createElement('canvas'); off.width = W; off.height = H;
   const octx = off.getContext('2d'); const img = octx.createImageData(W, H);
-  let gWater = 1e-3, gS = 1e-3, gR = 1e-3, gColour = 1e-3, cell = 4;
+  const GAIN_FLOOR = 0.05;
+  let gWater = GAIN_FLOOR, gS = GAIN_FLOOR, gR = GAIN_FLOOR * GAIN_FLOOR, gColour = GAIN_FLOOR, cell = 4;
 
   function size() {
     const box = view$.parentElement.getBoundingClientRect();
@@ -578,10 +579,12 @@ table.mx th { color: var(--muted); font-weight: 500; }
       }
       const o = i * 4; px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 255;
     }
-    // auto gain: rises instantly, falls slowly, so the picture stays readable as the tank fills
-    if (view === 'water') gWater = Math.max(mW, gWater * 0.985, 1e-3);
-    else if (view === 'colour') gColour = Math.max(mC, gColour * 0.985, 1e-3);
-    else { gS = Math.max(mS, gS * 0.985, 1e-3); gR = Math.max(mR, gR * 0.985, 1e-3); }
+    // auto gain: rises instantly, falls slowly, so the picture stays readable as the tank fills. It never turns the
+    // contrast past a floor of about a twentieth of a post's own strength, so water that has gone quiet looks quiet
+    // instead of being stretched back up to full brightness.
+    if (view === 'water') gWater = Math.max(mW, gWater * 0.985, GAIN_FLOOR);
+    else if (view === 'colour') gColour = Math.max(mC, gColour * 0.985, GAIN_FLOOR);
+    else { gS = Math.max(mS, gS * 0.985, GAIN_FLOOR); gR = Math.max(mR, gR * 0.985, GAIN_FLOOR * GAIN_FLOOR); }
     octx.putImageData(img, 0, 0);
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(off, 0, 0, cell * W, cell * H);
@@ -1003,7 +1006,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
       box(20, 40, 140, 41); box(20, 58, 140, 59); box(139, 40, 140, 59);
       P(130, 49, 24); P(30, 49, 31);
     }
-    rebuild(); changed(); gWater = gS = gR = 1e-3;
+    rebuild(); changed(); gWater = gS = gColour = GAIN_FLOOR; gR = GAIN_FLOOR * GAIN_FLOOR;
   }
 
   // ---------- keep the map across reloads and updates ----------
