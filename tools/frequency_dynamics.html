@@ -496,10 +496,17 @@ table.mx th { color: var(--muted); font-weight: 500; }
   }
   view$.addEventListener('pointerdown', ev => { painting = true; view$.setPointerCapture(ev.pointerId); stroke(ev, true); });
   view$.addEventListener('pointermove', ev => { const c = cellAt(ev); hover = c ? c[1] * W + c[0] : -1; if (painting) stroke(ev, false); });
-  view$.addEventListener('pointerup', () => {
-    if (lockedEnd && commitStraight()) rebuild();
+  // however the stroke ends (button up, the browser cancelling it, losing the pointer), lay the straight run and clear the preview
+  function endStroke() {
+    if (!painting) return;
+    if (anchor && lockedEnd && commitStraight()) rebuild();
     painting = false; anchor = last = lockedEnd = null;
-  });
+  }
+  view$.addEventListener('pointerup', endStroke);
+  view$.addEventListener('pointercancel', endStroke);
+  view$.addEventListener('lostpointercapture', endStroke);
+  window.addEventListener('pointerup', endStroke);
+  window.addEventListener('blur', endStroke);
   view$.addEventListener('pointerleave', () => { hover = -1; probe$.innerHTML = '<span class="empty">Hover the map to read a cell.</span>'; });
 
   // ---------- presets ----------
