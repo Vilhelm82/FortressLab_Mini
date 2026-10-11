@@ -148,6 +148,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
           </select>
           <button id="load">Load</button>
         </div>
+        <p class="hint">Your walls and posts are saved in this browser as you draw. Loading a starting map replaces them.</p>
         <div class="row">
           <label for="edge">Map edge</label>
           <select id="edge"><option value="open" selected>Open, waves leave</option><option value="hard">Hard, waves bounce</option></select>
@@ -529,6 +530,32 @@ table.mx th { color: var(--muted); font-weight: 500; }
     t = 0; rebuild(); syncLayers(); renderPosts(); renderMatrix(); gWater = gS = gR = 1e-3;
   }
 
+  // ---------- keep the map across reloads and updates ----------
+  // walls and posts are saved in this browser every second they change, and come back on reload
+  const KEY = 'fds-map-v1';
+  let savedSig = '';
+  function saveMap() {
+    const w = []; for (let i = 0; i < N; i++) if (wall[i]) w.push(i);
+    const sig = JSON.stringify({ w, p: posts.map(p => [p.x, p.y, p.s, p.muted ? 1 : 0]) });
+    if (sig === savedSig) return;
+    try { localStorage.setItem(KEY, sig); savedSig = sig; } catch (e) {}
+  }
+  function restoreMap() {
+    let raw = null;
+    try { raw = localStorage.getItem(KEY); } catch (e) {}
+    if (!raw) return false;
+    try {
+      const d = JSON.parse(raw);
+      wall = new Uint8Array(N); for (const i of d.w) if (i >= 0 && i < N) wall[i] = 1;
+      posts = d.p.map(([x, y, s, m]) => ({ x, y, s, muted: !!m }));
+      layers = new Map(); t = 0;
+      rebuild(); syncLayers(); renderPosts(); renderMatrix();
+      savedSig = raw; return true;
+    } catch (e) { return false; }
+  }
+  setInterval(saveMap, 1000);
+  window.addEventListener('pagehide', saveMap);
+
   // ---------- loop ----------
   function frame() {
     if (running) { pending += speed; while (pending >= 1) { step(); pending -= 1; } }
@@ -537,7 +564,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
     requestAnimationFrame(frame);
   }
   window.addEventListener('resize', size);
-  size(); loadPreset('courtyard');
+  size(); if (!restoreMap()) loadPreset('courtyard');
   // warm the tank up so the first view already shows the field rather than an empty map
   for (let k = 0; k < 500; k++) step();
   requestAnimationFrame(frame);
