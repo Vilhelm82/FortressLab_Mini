@@ -99,7 +99,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
 .hint { color: var(--muted); font-size: 12px; margin: 0; }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
 .sw-leaf { background: var(--calm); height: 10px; width: 10px; border-radius: 50% 0; }
-#sound[aria-pressed="true"], #cw[aria-pressed="true"], #rt[aria-pressed="true"] { border-color: var(--calm); color: var(--calm); }
+#sound[aria-pressed="true"], #ce[aria-pressed="true"], #cw[aria-pressed="true"], #rt[aria-pressed="true"] { border-color: var(--calm); color: var(--calm); }
 .chordv { font-family: var(--font-data); font-size: 12px; color: var(--calm); min-height: 1.4em; }
 
 /* ---- tidy layout ---- */
@@ -159,6 +159,7 @@ details[open] { display: grid; gap: 8px; }
         <span class="spacer"></span>
         <div class="seg" role="group" aria-label="Toggles">
           <button id="cw" aria-pressed="false">Colour waves</button>
+          <button id="ce" aria-pressed="false" title="Colour the waves that have bounced off a wall in each source's echo colour">Colour echoes</button>
           <button id="sound" aria-pressed="false">Sound on</button>
         </div>
         <div class="seg" role="group" aria-label="Playback">
@@ -242,6 +243,7 @@ details[open] { display: grid; gap: 8px; }
             <div class="ctl"><label for="c-pick">Colour</label>
               <div class="pickrow"><input id="c-pick" type="color" value="#5fd4c6"><select id="c-len" aria-label="Cycle length"></select></div><span></span></div>
             <div class="slots" id="c-slots" aria-label="Colour of each wave in the cycle"></div>
+            <div class="ctl"><label for="c-echo">Echoes</label><div class="pickrow"><input id="c-echo" type="color" value="#f4f1e8"><span class="hint">waves that have bounced</span></div><span></span></div>
             <div class="btnrow">
               <button id="c-all">Paint all</button>
               <button id="c-3">Every 3rd</button>
@@ -391,7 +393,8 @@ details[open] { display: grid; gap: 8px; }
   const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
   function lookOf(src) {
     if (!src.snd.look) { const pc = ((Math.round(src.chord ? src.chord[0] : src.s) % 12) + 12) % 12; src.snd.look = { len: 12, slots: Array(12).fill(hsl2hex(pc * 30, 70, 62)) }; }
-    const L = src.snd.look; if (!L.rgb || L.rgbOf !== L.slots.join()) { L.rgb = L.slots.map(hex2rgb); L.rgbOf = L.slots.join(); }
+    const L = src.snd.look; if (!L.echo) L.echo = '#f4f1e8';
+    if (!L.rgb || L.rgbOf !== L.slots.join() + L.echo) { L.rgb = L.slots.map(hex2rgb); L.echoRgb = hex2rgb(L.echo); L.rgbOf = L.slots.join() + L.echo; }
     return L;
   }
   let sel = null;               // the post or leaf whose sound is being tuned
@@ -403,6 +406,7 @@ details[open] { display: grid; gap: 8px; }
   let chord = new Set([24, 28, 31]);   // C4 E4 G4
   let edgeOpen = true, air = 0, speed = 4, pending = 0, kappa = 0.5 * Math.pow(1000, 0.5);
   let nL, nR, nU, nD, live, sigma, warming = true;
+  let fL, fR, fU, fD, sigmaF, echoes = false;   // the free-space twin, used only while echoes are coloured
 
   function rebuild() {
     nL = new Int32Array(N); nR = new Int32Array(N); nU = new Int32Array(N); nD = new Int32Array(N);
@@ -421,12 +425,25 @@ details[open] { display: grid; gap: 8px; }
       sigma[i] = s; lv.push(i);
     }
     live = Int32Array.from(lv);
+    // The same map with no walls and soft edges all round: what each source's waves would do if nothing were in
+    // the way. Subtracting it from the real water leaves exactly the waves that walls (or a hard edge) sent back.
+    fL = new Int32Array(N); fR = new Int32Array(N); fU = new Int32Array(N); fD = new Int32Array(N); sigmaF = new Float32Array(N);
+    for (let i = 0; i < N; i++) {
+      const x = i % W, y = (i / W) | 0;
+      fL[i] = x > 0 ? i - 1 : i; fR[i] = x < W - 1 ? i + 1 : i; fU[i] = y > 0 ? i - W : i; fD[i] = y < H - 1 ? i + W : i;
+      const d = Math.min(x, y, W - 1 - x, H - 1 - y); sigmaF[i] = d < SPONGE ? SMAX * Math.pow((SPONGE - d) / SPONGE, 2) : 0;
+    }
     for (const L of layers.values()) for (let i = 0; i < N; i++) if (wall[i]) { L.u[i] = 0; L.up[i] = 0; L.un[i] = 0; L.e[i] = 0; }
     for (const n of notes.values()) for (let i = 0; i < N; i++) if (wall[i]) n.e[i] = 0;
   }
 
   // every post and every note of every leaf gets its own layer, so each can be heard and tuned on its own
-  const newLayer = (key, s, src) => ({ key, s, src, fPrev: 0, omega: 2 * Math.PI * (WAVE_C / lambda(s)), u: new Float32Array(N), up: new Float32Array(N), un: new Float32Array(N), e: new Float32Array(N) });
+  const newLayer = (key, s, src) => withFree({ key, s, src, fPrev: 0, omega: 2 * Math.PI * (WAVE_C / lambda(s)), u: new Float32Array(N), up: new Float32Array(N), un: new Float32Array(N), e: new Float32Array(N) });
+  // give a layer its free-space twin and the strength records for its direct and bounced waves
+  function withFree(L) {
+    if (echoes && !L.fu) { L.fu = new Float32Array(N); L.fup = new Float32Array(N); L.fun = new Float32Array(N); L.eDir = new Float32Array(N); L.eEcho = new Float32Array(N); }
+    return L;
+  }
   function syncLayers() {
     const want = new Map();
     for (const p of posts) want.set('p' + p.id, [p.s, p]);
@@ -440,7 +457,7 @@ details[open] { display: grid; gap: 8px; }
   }
 
   function resetWaves() {
-    for (const L of layers.values()) { L.u.fill(0); L.up.fill(0); L.un.fill(0); L.e.fill(0); }
+    for (const L of layers.values()) { L.u.fill(0); L.up.fill(0); L.un.fill(0); L.e.fill(0); if (L.fu) { L.fu.fill(0); L.fup.fill(0); L.fun.fill(0); L.eDir.fill(0); L.eEcho.fill(0); } }
     for (const n of notes.values()) n.e.fill(0);
     for (const p of posts) p.env = 0;
     for (const l of leaves) { l.env = 0; l.trail = []; }
@@ -475,11 +492,23 @@ details[open] { display: grid; gap: 8px; }
       // strength, the fade envelope and the 1/omega loudness scaling all live inside f, so changing any of them
       // mid-song still adds no net water
       const src = L.src, f = (src.env || 0) * (src.volNow === undefined ? 1 : src.volNow) * Math.cos(L.phase) / L.omega;
-      un[src.chord ? leafCell(src) : src.y * W + src.x] += AMP * (L.fPrev - f);
+      const at = src.chord ? leafCell(src) : src.y * W + src.x, push = AMP * (L.fPrev - f);
+      un[at] += push;
       L.fPrev = f;
       L.up = u; L.u = un; L.un = up;
       const nu = L.u;
       for (let k = 0; k < live.length; k++) { const i = live[k]; e[i] += (nu[i] * nu[i] - e[i]) * EMA; }
+      if (echoes && L.fu) {
+        const fu = L.fu, fup = L.fup, fun = L.fun;
+        for (let i = 0; i < N; i++) {
+          const sF = sigmaF[i] + airL, lap = fu[fL[i]] + fu[fR[i]] + fu[fU[i]] + fu[fD[i]] - 4 * fu[i];
+          fun[i] = (2 * fu[i] - (1 - sF) * fup[i] + C2 * lap) / (1 + sF);
+        }
+        fun[at] += push;
+        L.fup = fu; L.fu = fun; L.fun = fup;
+        const nf = L.fu, ed = L.eDir, ee = L.eEcho;
+        for (let k = 0; k < live.length; k++) { const i = live[k], dv = nf[i], ev = nu[i] - dv; ed[i] += (dv * dv - ed[i]) * EMA; ee[i] += (ev * ev - ee[i]) * EMA; }
+      }
     }
     // the combined strength of each note, all its sources added together as real waves
     const groups = new Map();
@@ -564,21 +593,25 @@ details[open] { display: grid; gap: 8px; }
   const rgb = c => `rgb(${c.map(Math.round)})`;
 
   // the colour of the wave of this layer passing through a cell right now, from its source's colour cycle
-  function waveColour(L, i) {
-    const x = i % W, y = (i / W) | 0, src = L.src, u = L.u[i];
+  function waveColour(L, i, U = L.u, UP = L.up) {
+    const x = i % W, y = (i / W) | 0, src = L.src, u = U[i];
     const geo = (L.phase || 0) - (L.omega / WAVE_C) * Math.hypot(x - src.x, y - src.y);
-    const psi = Math.atan2(u, (u - L.up[i]) / L.omega);
+    const psi = Math.atan2(u, (u - UP[i]) / L.omega);
     let d = (psi - geo) % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI;
     const n = Math.round((geo + d - Math.PI / 2) / (2 * Math.PI));
     const look = lookOf(src); return look.rgb[((n % look.len) + look.len) % look.len];
   }
   // a weighted blend of the wave colours in a cell; falls back to the view's own colour where nothing is there
+  // With echoes coloured, each layer counts as two parts: part 0 the waves straight from the source (in their wave
+  // colours), part 1 the waves that have bounced (in the source's echo colour). Otherwise part 0 is the whole layer.
+  const split = L => echoes && L.fu;
   function blendWaves(i, weight, fallback) {
     let r = 0, g = 0, b = 0, ws = 0;
     for (const L of layers.values()) {
       if (L.src.muted) continue;
-      const w = weight(L); if (!(w > 0)) continue;
-      const col = waveColour(L, i); r += w * col[0]; g += w * col[1]; b += w * col[2]; ws += w;
+      const w0 = weight(L, 0);
+      if (w0 > 0) { const col = split(L) ? waveColour(L, i, L.fu, L.fup) : waveColour(L, i); r += w0 * col[0]; g += w0 * col[1]; b += w0 * col[2]; ws += w0; }
+      if (split(L)) { const w1 = weight(L, 1); if (w1 > 0) { const col = lookOf(L.src).echoRgb; r += w1 * col[0]; g += w1 * col[1]; b += w1 * col[2]; ws += w1; } }
     }
     return ws > 0 ? [r / ws, g / ws, b / ws] : fallback;
   }
@@ -604,12 +637,14 @@ details[open] { display: grid; gap: 8px; }
         let wr = 0, wg = 0, wb = 0, ws = 0;
         if (Math.abs(kk) > 0.02) for (const L of layers.values()) {
           const src = L.src; if (src.muted) continue;
+          if (split(L)) {
+            const dir = L.fu[i], ech = L.u[i] - dir;
+            if (dir * sign > 0) { const col = waveColour(L, i, L.fu, L.fup), w = dir * sign; wr += w * col[0]; wg += w * col[1]; wb += w * col[2]; ws += w; }
+            if (ech * sign > 0) { const col = lookOf(src).echoRgb, w = ech * sign; wr += w * col[0]; wg += w * col[1]; wb += w * col[2]; ws += w; }
+            continue;
+          }
           const u = L.u[i], wgt = u * sign; if (wgt <= 0) continue;
-          const k = L.omega / WAVE_C, geo = (L.phase || 0) - k * Math.hypot(x - src.x, y - src.y);
-          const psi = Math.atan2(u, (u - L.up[i]) / L.omega);
-          let d = (psi - geo) % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI;
-          const n = Math.round((geo + d - Math.PI / 2) / (2 * Math.PI));
-          const look = lookOf(src), col = look.rgb[((n % look.len) + look.len) % look.len];
+          const col = waveColour(L, i);
           wr += wgt * col[0]; wg += wgt * col[1]; wb += wgt * col[2]; ws += wgt;
         }
         if (kk > 0 && ws > 0) c = mix(COL.deep, [wr / ws, wg / ws, wb / ws], kk);
@@ -621,7 +656,7 @@ details[open] { display: grid; gap: 8px; }
         mW = Math.max(mW, Math.abs(v));
         const k = Math.max(-1, Math.min(1, v / gWater));
         // with wave colours on, the crest colour is the blend of the waves in this cell, weighted by how hard each is moving it
-        const top = colourWaves ? blendWaves(i, L => Math.abs(L.u[i]), COL.crest) : COL.crest;
+        const top = colourWaves ? blendWaves(i, (L, part) => split(L) ? Math.abs(part ? L.u[i] - L.fu[i] : L.fu[i]) : Math.abs(L.u[i]), COL.crest) : COL.crest;
         c = mix(COL.deep, top, 0.5 + 0.5 * k);
       } else {
         const { E, R, clash } = cellRead(i, arr);
@@ -630,15 +665,17 @@ details[open] { display: grid; gap: 8px; }
           const b = Math.min(1, Math.sqrt(S / gS));
           const r = Math.min(1, clash * clash);   // squared, so consonant chords sit calm and only real clashes run hot
           // with wave colours on, calm water takes the blend of the waves here, weighted by strength; clash still pulls it to turbulence
-          const calm = colourWaves ? blendWaves(i, L => Math.sqrt(2 * L.e[i]), COL.calm) : COL.calm;
+          const calm = colourWaves ? blendWaves(i, (L, part) => Math.sqrt(2 * (split(L) ? (part ? L.eEcho[i] : L.eDir[i]) : L.e[i])), COL.calm) : COL.calm;
           c = mix(COL.deep, mix(calm, COL.turb, r), b);
         } else {
           const r = Math.min(1, Math.sqrt(R / gR));
           // with wave colours on, the churn takes the colours of the waves causing it, each weighted by how much clash it brings
-          const hot = colourWaves ? blendWaves(i, L => {
+          const hot = colourWaves ? blendWaves(i, (L, part) => {
             const A = Math.sqrt(2 * L.e[i]); let q = 0;
             for (const O of layers.values()) if (O !== L && !O.src.muted) q += Math.sqrt(2 * O.e[i]) * clashOf(L.s, O.s);
-            return A * q;
+            if (!split(L)) return A * q;
+            const ad = Math.sqrt(2 * L.eDir[i]), ae = Math.sqrt(2 * L.eEcho[i]), tot = ad + ae;
+            return tot > 0 ? A * q * (part ? ae : ad) / tot : 0;   // the clash a layer brings, shared between its direct and bounced waves
           }, COL.turb) : COL.turb;
           c = mix(COL.deep, hot, r);
         }
@@ -929,13 +966,14 @@ details[open] { display: grid; gap: 8px; }
   function renderLook() {
     if (!sel) return;
     const L = lookOf(sel);
-    $('c-len').value = L.len;
+    $('c-len').value = L.len; $('c-echo').value = L.echo;
     [...$('c-slots').children].forEach((b, k) => {
       b.style.background = L.slots[k]; b.className = k < L.len ? '' : 'off';
       b.setAttribute('aria-pressed', k === slotSel ? 'true' : 'false');
     });
   }
   $('c-pick').addEventListener('input', e => { if (!sel) return; lookOf(sel).slots[slotSel] = e.target.value; renderLook(); });
+  $('c-echo').addEventListener('input', e => { if (!sel) return; lookOf(sel).echo = e.target.value; });
   $('c-len').onchange = e => { if (!sel) return; lookOf(sel).len = +e.target.value; renderLook(); };
   $('c-all').onclick = () => { if (!sel) return; const L = lookOf(sel); L.slots.fill($('c-pick').value); renderLook(); };
   // every Nth wave in the picked colour, the rest left as wave 2's colour; the cycle is set to fit evenly
@@ -947,7 +985,7 @@ details[open] { display: grid; gap: 8px; }
   $('c-5').onclick = () => everyNth(5, 10);
   $('c-note').onclick = () => {
     if (!sel) return; const L = lookOf(sel), notesOf = o => o.chord || [o.s], mine = notesOf(sel);
-    for (const o of [...posts, ...leaves]) if (o !== sel && notesOf(o).some(n => mine.includes(n))) o.snd.look = { len: L.len, slots: [...L.slots] };
+    for (const o of [...posts, ...leaves]) if (o !== sel && notesOf(o).some(n => mine.includes(n))) o.snd.look = { len: L.len, slots: [...L.slots], echo: L.echo };
   };
   // Colour waves: the Water, Harmony and Turbulence views take their colours from each source's wave colours,
   // each mixing them its own way; off, they look exactly as they always have
@@ -956,6 +994,13 @@ details[open] { display: grid; gap: 8px; }
     try { localStorage.setItem('fds-colour-waves', on ? '1' : '0'); } catch (e) {}
   }
   $('cw').onclick = () => setColourWaves(!colourWaves);
+  // Colour echoes runs a wall-less twin of the water to tell bounced waves from direct ones. Switching it on restarts
+  // the water so the two start level; it roughly doubles the work, so it's off by default.
+  $('ce').onclick = () => {
+    echoes = !echoes; $('ce').setAttribute('aria-pressed', echoes ? 'true' : 'false');
+    if (echoes) { for (const L of layers.values()) withFree(L); resetWaves(); }
+    else for (const L of layers.values()) { delete L.fu; delete L.fup; delete L.fun; delete L.eDir; delete L.eEcho; }
+  };
   setColourWaves(colourWaves);
   $('m-ear').onclick = () => setMeasure('ear');
   $('m-wave').onclick = () => setMeasure('wave');
