@@ -101,12 +101,35 @@ table.mx th { color: var(--muted); font-weight: 500; }
 .sw-leaf { background: var(--calm); height: 10px; width: 10px; border-radius: 50% 0; }
 #sound[aria-pressed="true"], #cw[aria-pressed="true"], #rt[aria-pressed="true"] { border-color: var(--calm); color: var(--calm); }
 .chordv { font-family: var(--font-data); font-size: 12px; color: var(--calm); min-height: 1.4em; }
+
+/* ---- tidy layout ---- */
+.under { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 700px) { .under { grid-template-columns: minmax(0, 1fr); } }
+.cardhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.seg.small button { padding: 4px 10px; font-size: 12px; }
+label.inline { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.ctl { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.ctl > label { color: var(--muted); font-size: 12px; }
+.ctl select, .ctl input[type=range] { width: 100%; min-width: 0; }
+.ctl .val { font-family: var(--font-data); font-size: 11px; color: var(--muted); text-align: right; white-space: nowrap; }
+.btnrow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+button.quiet { background: transparent; color: var(--muted); font-size: 12px; padding: 5px 8px; text-align: left; border-style: dashed; }
+button.quiet:hover { color: var(--fg); }
+.ivkey { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; }
+.ivwho { grid-column: 1 / -1; }
+.clock { font-family: var(--font-data); }
+.post .sub { color: var(--muted); font-size: 11px; }
+.post .x { padding: 3px 7px; }
+details { border-top: 1px solid var(--line); padding-top: 8px; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+details[open] { display: grid; gap: 8px; }
+.tune h3:first-child { margin-top: 0; }
 </style>
 
 <div class="wrap">
   <header>
     <h1>Frequency Dynamics Simulator</h1>
-    <p>Each post sings its note. Leaves sing their own chord and drift with the water. Where notes agree the water builds; where they clash it churns.</p>
+    <p>Posts sing a note, leaves sing a chord and drift with the water. Agreeing notes build calm water; clashing notes churn it.</p>
   </header>
 
   <div class="main">
@@ -125,32 +148,57 @@ table.mx th { color: var(--muted); font-weight: 500; }
           <button id="v-colour" aria-pressed="false">Wave colours</button>
         </div>
         <span class="spacer"></span>
-        <button id="cw" aria-pressed="false">Colour waves</button>
-        <button id="sound" aria-pressed="false">Sound on</button>
-        <button id="run">Pause</button>
-        <button id="reset">Reset waves</button>
+        <div class="seg" role="group" aria-label="Toggles">
+          <button id="cw" aria-pressed="false">Colour waves</button>
+          <button id="sound" aria-pressed="false">Sound on</button>
+        </div>
+        <div class="seg" role="group" aria-label="Playback">
+          <button id="run">Pause</button>
+          <button id="reset">Reset waves</button>
+        </div>
       </div>
       <div class="canvas-box"><canvas id="view" aria-label="Ripple tank map"></canvas></div>
       <div class="legend">
         <span id="leg"><span class="swatch sw-harm"></span>calm and constructive to turbulent, brightness is strength</span>
-        <span><span class="swatch sw-wall"></span>hard wall, reflects everything</span>
-        <span><span class="swatch sw-leaf"></span>leaf and its trail</span>
-        <span id="clock" style="font-family:var(--font-data)">t = 0</span>
+        <span><span class="swatch sw-wall"></span>hard wall</span>
+        <span><span class="swatch sw-leaf"></span>leaf and trail</span>
+        <span class="spacer"></span>
+        <span id="clock" class="clock">t = 0</span>
+      </div>
+
+      <div class="under">
+        <div class="card">
+          <h2>Probe</h2>
+          <div class="probe" id="probe"><span class="empty">Hover the map to read a cell. Turn sound on to hear it.</span></div>
+        </div>
+        <div class="card">
+          <div class="cardhead">
+            <h2>Clash between notes in play</h2>
+            <div class="seg small" role="group" aria-label="How clash is measured">
+              <button id="m-ear" aria-pressed="true">Ear</button>
+              <button id="m-wave" aria-pressed="false">Waves</button>
+            </div>
+          </div>
+          <div class="mx-box" id="mx"></div>
+          <p class="hint" id="mxhint"></p>
+        </div>
       </div>
     </section>
 
     <aside>
       <div class="card">
-        <h2 id="noteh">Note for the next post</h2>
+        <div class="cardhead">
+          <h2 id="noteh">Note for the next post</h2>
+          <label class="inline" for="oct">Octave
+            <select id="oct"><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select></label>
+        </div>
         <div class="notes" id="notes"></div>
         <div class="chordv" id="chordv" hidden></div>
-        <div class="row">
-          <label for="oct">Octave</label>
-          <select id="oct"><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select>
+        <div class="ivkey" id="ivkey">
+          <span id="ivwho" class="ivwho">Hover a post to colour the notes against it.</span>
+          <span><i style="background:var(--perfect)"></i>perfect</span><span><i style="background:var(--imperfect)"></i>imperfect</span>
+          <span><i style="background:var(--mild)"></i>mild clash</span><span><i style="background:var(--sharp)"></i>sharp clash</span>
         </div>
-        <div class="ivkey" id="ivkey"><span id="ivwho">Hover a post on the map to see how each note sits against it.</span>
-          <span><i style="background:var(--perfect)"></i>perfect consonance</span><span><i style="background:var(--imperfect)"></i>imperfect consonance</span>
-          <span><i style="background:var(--mild)"></i>mild dissonance</span><span><i style="background:var(--sharp)"></i>sharp dissonance</span></div>
         <p class="hint" id="notehint">Pick a note, then click the map to place a post. Hold Shift while drawing walls to keep them straight.</p>
       </div>
 
@@ -160,94 +208,66 @@ table.mx th { color: var(--muted); font-weight: 500; }
       </div>
 
       <div class="card">
-        <h2>Probe</h2>
-        <div class="probe" id="probe"><span class="empty">Hover the map to read a cell. Turn sound on to hear it.</span></div>
-      </div>
+        <h2 id="tuneh">Tune</h2>
+        <p class="hint" id="tuneempty">Press Tune on anything in the list to shape its sound and wave colours.</p>
+        <div id="tunebody" hidden>
+          <div class="tune">
+            <h3>Sound</h3>
+            <div class="ctl"><label for="s-shape">Wave</label>
+              <select id="s-shape"><option value="overtones">Field tone (8 overtones)</option><option value="sine">Sine</option><option value="triangle">Triangle</option><option value="sawtooth">Saw</option><option value="square">Square</option></select><span></span></div>
+            <div class="ctl"><label for="s-filter">Filter</label>
+              <select id="s-filter"><option value="none">Off</option><option value="lowpass">Low pass</option><option value="bandpass">Band pass</option><option value="highpass">High pass</option></select><span></span></div>
+            <div class="ctl"><label for="s-cut">Cutoff</label><input id="s-cut" type="range" min="0" max="100" value="60"><span class="val" id="s-cutv"></span></div>
+            <div class="ctl"><label for="s-q">Resonance</label><input id="s-q" type="range" min="0" max="100" value="20"><span class="val" id="s-qv"></span></div>
+            <div class="ctl"><label for="s-vol">Volume</label><input id="s-vol" type="range" min="0" max="200" value="100"><span class="val" id="s-volv"></span></div>
+            <div class="ctl"><label for="s-verb">Reverb</label><input id="s-verb" type="range" min="0" max="100" value="25"><span class="val" id="s-verbv"></span></div>
+            <button id="s-all" class="quiet">Use this sound on everything</button>
 
-      <div class="card">
-        <h2 id="tuneh">Sound</h2>
-        <div class="tune" id="tune">
-          <p class="hint" id="tuneempty">Press Tune on a post or leaf in the list above to shape how it sounds and how its waves are coloured.</p>
-          <div id="tunebody" hidden>
-            <div class="tune">
-              <div class="row"><label for="s-shape">Wave</label>
-                <select id="s-shape"><option value="overtones">Overtones (the field's own tone)</option><option value="sine">Sine</option><option value="triangle">Triangle</option><option value="sawtooth">Saw</option><option value="square">Square</option></select></div>
-              <div class="row"><label for="s-filter">Filter</label>
-                <select id="s-filter"><option value="none">Off</option><option value="lowpass">Low pass</option><option value="bandpass">Band pass</option><option value="highpass">High pass</option></select></div>
-              <div class="row"><label for="s-cut">Cutoff</label><input id="s-cut" type="range" min="0" max="100" value="60"><span class="val" id="s-cutv"></span></div>
-              <div class="row"><label for="s-q">Resonance</label><input id="s-q" type="range" min="0" max="100" value="20"><span class="val" id="s-qv"></span></div>
-              <div class="row"><label for="s-vol">Volume</label><input id="s-vol" type="range" min="0" max="200" value="100"><span class="val" id="s-volv"></span></div>
-              <div class="row"><label for="s-verb">Reverb</label><input id="s-verb" type="range" min="0" max="100" value="25"><span class="val" id="s-verbv"></span></div>
-              <div class="row"><button id="s-all">Use this sound on everything</button></div>
-              <h3>Wave colours</h3>
-              <p class="hint">Shown in the Wave colours view. Each wave this source sends out takes the next colour in its cycle.</p>
-              <div class="row"><label for="c-pick">Colour</label><input id="c-pick" type="color" value="#5fd4c6">
-                <label for="c-len">Cycle</label><select id="c-len"></select></div>
-              <div class="slots" id="c-slots" aria-label="Colour of each wave in the cycle"></div>
-              <div class="row">
-                <button id="c-all">Paint all</button>
-                <button id="c-3">Every 3rd</button>
-                <button id="c-5">Every 5th</button>
-              </div>
-              <div class="row"><button id="c-note">Copy colours to everything on this note</button></div>
+            <h3>Wave colours</h3>
+            <div class="ctl"><label for="c-pick">Colour</label>
+              <div class="row"><input id="c-pick" type="color" value="#5fd4c6"><select id="c-len" aria-label="Cycle length"></select></div><span></span></div>
+            <div class="slots" id="c-slots" aria-label="Colour of each wave in the cycle"></div>
+            <div class="btnrow">
+              <button id="c-all">Paint all</button>
+              <button id="c-3">Every 3rd</button>
+              <button id="c-5">Every 5th</button>
             </div>
+            <button id="c-note" class="quiet">Copy colours to everything on this note</button>
           </div>
-          <div class="row"><label for="m-vol">Master</label><input id="m-vol" type="range" min="0" max="100" value="80" style="flex:1"></div>
-          <div class="row"><label for="m-room">Room</label><input id="m-room" type="range" min="2" max="80" value="22" style="flex:1"><span class="val" id="m-roomv">2.2 s</span></div>
-          <p class="hint">These shape what you hear only. The clash maths and the leaves always use the field's own 8-overtone tone.</p>
         </div>
       </div>
 
       <div class="card">
-        <h2>Clash between the notes in play</h2>
-        <div class="seg" role="group" aria-label="How clash is measured">
-          <button id="m-ear" aria-pressed="true">Ear: roughness</button>
-          <button id="m-wave" aria-pressed="false">Waves: ratio</button>
+        <h2>Simulation</h2>
+        <div class="tune">
+          <div class="ctl"><label for="preset">Map</label>
+            <select id="preset">
+              <option value="courtyard">Courtyard with a gate</option>
+              <option value="fifth">Two posts, a fifth apart</option>
+              <option value="semitone">Two posts, a semitone apart</option>
+              <option value="corridor">A corridor</option>
+              <option value="blank">Empty field</option>
+            </select>
+            <button id="load">Load</button></div>
+          <div class="ctl"><label for="edge">Edge</label>
+            <select id="edge"><option value="open" selected>Open, waves leave</option><option value="hard">Hard, waves bounce</option></select><span></span></div>
+          <div class="ctl"><label for="speed">Speed</label><input id="speed" type="range" min="0" max="100" value="85"><span class="val" id="speedv">4 steps a frame</span></div>
+          <div class="ctl"><label for="rt">Clock</label><button id="rt" aria-pressed="false">Real time</button><span class="val" id="rtv">off</span></div>
+          <div class="ctl"><label for="cur">Current</label><input id="cur" type="range" min="0" max="100" value="50"><span class="val" id="curv">x16</span></div>
+          <div class="ctl"><label for="loss">Air loss</label><input id="loss" type="range" min="0" max="20" value="0"><span class="val" id="lossv">none</span></div>
+          <h3>Listening</h3>
+          <div class="ctl"><label for="m-vol">Volume</label><input id="m-vol" type="range" min="0" max="100" value="80"><span></span></div>
+          <div class="ctl"><label for="m-room">Room</label><input id="m-room" type="range" min="2" max="80" value="22"><span class="val" id="m-roomv">2.2 s</span></div>
         </div>
-        <div class="mx-box" id="mx"></div>
-        <p class="hint" id="mxhint"></p>
-      </div>
-
-      <div class="card">
-        <h2>Map</h2>
-        <div class="row">
-          <label for="preset">Start from</label>
-          <select id="preset">
-            <option value="courtyard">Courtyard with a gate</option>
-            <option value="fifth">Two posts, a fifth apart</option>
-            <option value="semitone">Two posts, a semitone apart</option>
-            <option value="corridor">A corridor</option>
-            <option value="blank">Empty field</option>
-          </select>
-          <button id="load">Load</button>
-        </div>
-        <p class="hint">Your walls, posts and leaves are saved in this browser as you go. Loading a starting map replaces them.</p>
-        <div class="row">
-          <label for="edge">Map edge</label>
-          <select id="edge"><option value="open" selected>Open, waves leave</option><option value="hard">Hard, waves bounce</option></select>
-        </div>
-        <div class="row">
-          <label for="speed">Speed</label>
-          <input id="speed" type="range" min="0" max="100" value="85">
-          <span class="hint" id="speedv">4 steps a frame</span>
-        </div>
-        <div class="row">
-          <button id="rt" aria-pressed="false">Real time</button>
-          <span class="hint" id="rtv">Off: the speed slider sets the pace.</span>
-        </div>
-        <div class="row">
-          <label for="cur">Current</label>
-          <input id="cur" type="range" min="0" max="100" value="50">
-          <span class="hint" id="curv">x16</span>
-        </div>
-        <div class="row">
-          <label for="loss">Air loss</label>
-          <input id="loss" type="range" min="0" max="20" value="0">
-          <span class="hint" id="lossv">none</span>
-        </div>
-        <p class="hint">The current runs from clashing water toward water that agrees with a leaf's chord, faster where that changes more steeply, and never faster than the waves themselves travel. A leaf moves at half the current under it. Current scales how hard a slope pushes.</p>
-        <p class="hint">Air loss grows with the square of the frequency, so high notes fade over distance much faster than low ones: B5 loses about 14 times what C4 does. Low notes also bend around walls more, which comes straight out of their longer waves.</p>
-        <p class="hint">With a hard edge and no air loss nothing ever leaves the map, so the water keeps filling up. Open edges let it drain out of the world.</p>
+        <details>
+          <summary>How the water works</summary>
+          <p class="hint">Your walls, posts and leaves are saved in this browser as you go. Loading a map replaces them.</p>
+          <p class="hint">The current runs from clashing water toward water that agrees with a leaf's chord, faster where that changes more steeply, never faster than the waves travel. A leaf moves at half the current under it. Current scales how hard a slope pushes.</p>
+          <p class="hint">Real time runs the clock at a hundredth of true pitch: A4 vibrates 4.40 times a second and every note at its own true rate. A cell is then about 7 cm and the map an 11 m room.</p>
+          <p class="hint">Air loss grows with the square of the frequency, so highs fade over distance far faster than lows: B5 loses about 14 times what C4 does. Low notes also bend around walls more, straight out of their longer waves.</p>
+          <p class="hint">With a hard edge and no air loss nothing ever leaves the map. Sound trapped behind hard walls rings on until air loss takes it.</p>
+          <p class="hint">Sound and colour settings change what you hear and see only. The clash maths and the leaves always use the field's own 8-overtone tone.</p>
+        </details>
       </div>
     </aside>
   </div>
@@ -733,7 +753,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
       if (hoverPost) c.setAttribute('data-iv', IV_CLASS[(((s - hoverPost.s) % 12) + 12) % 12]); else c.removeAttribute('data-iv');
     });
     document.getElementById('ivwho').textContent = hoverPost
-      ? 'Against post ' + label(hoverPost.s) + ':' : 'Hover a post on the map to see how each note sits against it.';
+      ? 'Against post ' + label(hoverPost.s) + ':' : 'Hover a post to colour the notes against it.';
     const cv = document.getElementById('chordv');
     cv.hidden = tool !== 'leaf';
     cv.textContent = 'Chord: ' + [...chord].sort((a, b) => a - b).map(label).join(' ');
@@ -753,12 +773,12 @@ table.mx th { color: var(--muted); font-weight: 500; }
       tn.onclick = () => { sel = obj; renderPosts(); renderTune(); };
       const m = document.createElement('button'); m.textContent = obj.muted ? 'Unmute' : 'Mute';
       m.onclick = () => { obj.muted = !obj.muted; renderPosts(); };
-      const d = document.createElement('button'); d.textContent = 'Remove'; d.onclick = remove;
+      const d = document.createElement('button'); d.textContent = '✕'; d.className = 'x'; d.setAttribute('aria-label', 'Remove'); d.title = 'Remove'; d.onclick = remove;
       r.append(tn, m, d); el.appendChild(r);
     };
-    posts.forEach((p, k) => row('var(--fg)', `${label(p.s)} <span style="color:var(--muted)">post at ${p.x}, ${p.y}</span>`, p,
+    posts.forEach((p, k) => row('var(--fg)', `<b>${label(p.s)}</b> <span class="sub">post · ${p.x}, ${p.y}</span>`, p,
       () => { posts.splice(k, 1); changed(); }));
-    leaves.forEach((l, k) => row('var(--calm)', `${l.chord.map(label).join(' ')} <span style="color:var(--muted)">leaf at ${Math.round(l.x)}, ${Math.round(l.y)}</span>`, l,
+    leaves.forEach((l, k) => row('var(--calm)', `<b>${l.chord.map(label).join(' ')}</b> <span class="sub">leaf · ${Math.round(l.x)}, ${Math.round(l.y)}</span>`, l,
       () => { leaves.splice(k, 1); changed(); }));
   }
   function renderMatrix() {
@@ -800,9 +820,9 @@ table.mx th { color: var(--muted); font-weight: 500; }
   const qPos = q => 100 * Math.log(q / 0.3) / Math.log(60);
   function renderTune() {
     $('tuneempty').hidden = !!sel; $('tunebody').hidden = !sel;
-    if (!sel) { $('tuneh').textContent = 'Sound'; return; }
+    if (!sel) { $('tuneh').textContent = 'Tune'; return; }
     const s = sel.snd;
-    $('tuneh').textContent = sel.chord ? 'Leaf ' + sel.chord.map(label).join(' ') : 'Post ' + label(sel.s);
+    $('tuneh').textContent = 'Tune ' + (sel.chord ? 'leaf ' + sel.chord.map(label).join(' ') : 'post ' + label(sel.s));
     renderLook();
     $('s-shape').value = s.shape; $('s-filter').value = s.filter;
     $('s-cut').value = cutPos(s.cutoff); $('s-q').value = qPos(s.q);
@@ -895,8 +915,8 @@ table.mx th { color: var(--muted); font-weight: 500; }
     document.getElementById('rt').setAttribute('aria-pressed', realTime ? 'true' : 'false');
     document.getElementById('speed').disabled = realTime;
     document.getElementById('rtv').textContent = realTime
-      ? `On: A4 vibrates ${RT_HZ_A4.toFixed(2)} times a second, every note at its true rate a hundred times slower (${RT_STEPS_PER_SEC.toFixed(1)} steps a second).`
-      : 'Off: the speed slider sets the pace.';
+      ? `A4 = ${RT_HZ_A4.toFixed(2)} Hz`
+      : 'off';
   };
   document.getElementById('speed').oninput = e => {
     speed = 0.02 * Math.pow(500, +e.target.value / 100);
