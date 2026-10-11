@@ -351,7 +351,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
   }
 
   // every post and every note of every leaf gets its own layer, so each can be heard and tuned on its own
-  const newLayer = (key, s, src) => ({ key, s, src, omega: 2 * Math.PI * (WAVE_C / lambda(s)), u: new Float32Array(N), up: new Float32Array(N), un: new Float32Array(N), e: new Float32Array(N) });
+  const newLayer = (key, s, src) => ({ key, s, src, fPrev: 0, omega: 2 * Math.PI * (WAVE_C / lambda(s)), u: new Float32Array(N), up: new Float32Array(N), un: new Float32Array(N), e: new Float32Array(N) });
   function syncLayers() {
     const want = new Map();
     for (const p of posts) want.set('p' + p.id, [p.s, p]);
