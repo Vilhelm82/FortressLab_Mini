@@ -367,14 +367,19 @@ table.mx th { color: var(--muted); font-weight: 500; }
   function resetWaves() {
     for (const L of layers.values()) { L.u.fill(0); L.up.fill(0); L.un.fill(0); L.e.fill(0); }
     for (const n of notes.values()) n.e.fill(0);
-    for (const p of posts) p.t0 = t;
-    for (const l of leaves) { l.t0 = t; l.trail = []; }
+    for (const p of posts) p.env = 0;
+    for (const l of leaves) { l.env = 0; l.trail = []; }
+    for (const L of layers.values()) L.fPrev = 0;
   }
 
   // ---------- the wave step ----------
-  const ramp = src => Math.min(1, Math.max(0, (t - src.t0) / RAMP));
   const leafCell = l => Math.round(l.y) * W + Math.round(l.x);
   function step() {
+    // Each source fades its song in and out rather than switching it, so muting or unmuting never kicks the water.
+    for (const src of [...posts, ...leaves]) {
+      const target = src.muted ? 0 : 1, env = src.env || 0;
+      src.env = Math.abs(target - env) < 1 / RAMP ? target : env + Math.sign(target - env) / RAMP;
+    }
     for (const L of layers.values()) {
       const u = L.u, up = L.up, un = L.un, e = L.e;
       // air takes highs far faster than lows: loss grows with the square of the frequency, set relative to A4
@@ -384,9 +389,13 @@ table.mx th { color: var(--muted); font-weight: 500; }
         const lap = u[nL[i]] + u[nR[i]] + u[nU[i]] + u[nD[i]] - 4 * u[i];
         un[i] = (2 * u[i] - (1 - s) * up[i] + C2 * lap) / (1 + s);
       }
-      const wave = AMP * Math.sin(L.omega * t);
-      const src = L.src;
-      if (!src.muted) un[src.chord ? leafCell(src) : src.y * W + src.x] += wave * ramp(src);
+      // A source pushes the water by the step-to-step change of a bounded tone, never by the tone itself, so over
+      // time it adds no net water. Driving with the tone directly left a little extra every cycle, and in a walled-off
+      // area with nowhere to drain it the whole region slowly rose or sank: a silent offset that looked and sounded
+      // like the note was everywhere. Same loudness as before.
+      const src = L.src, f = (src.env || 0) * Math.cos(L.omega * t);
+      un[src.chord ? leafCell(src) : src.y * W + src.x] += AMP * (L.fPrev - f) / L.omega;
+      L.fPrev = f;
       L.up = u; L.u = un; L.un = up;
       const nu = L.u;
       for (let k = 0; k < live.length; k++) { const i = live[k]; e[i] += (nu[i] * nu[i] - e[i]) * EMA; }
