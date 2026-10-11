@@ -17,6 +17,10 @@
   --stone: #c8b388;     /* walls, and the accent */
   --deep: #07202a;      /* wave trough */
   --crest: #bfeef0;     /* wave crest */
+  --perfect: #6fd38a;   /* interval classes, for the note picker hint */
+  --imperfect: #6aa8f0;
+  --mild: #e8c95a;
+  --sharp: #f06a5a;
   --font-display: "Bricolage Grotesque", "Hanken Grotesk", system-ui, sans-serif;
   --font-body: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-data: "Azeret Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
@@ -55,6 +59,14 @@ aside { display: grid; gap: 12px; min-width: 0; }
 .notes button { font-family: var(--font-data); font-size: 12px; padding: 7px 0; }
 .notes button.sharp { background: var(--bg); }
 .notes button[aria-pressed="true"] { border-color: var(--stone); color: var(--stone); }
+.notes button[data-iv] { color: var(--bg); font-weight: 600; }
+.notes button[data-iv="perfect"] { background: var(--perfect); border-color: var(--perfect); }
+.notes button[data-iv="imperfect"] { background: var(--imperfect); border-color: var(--imperfect); }
+.notes button[data-iv="mild"] { background: var(--mild); border-color: var(--mild); }
+.notes button[data-iv="sharp"] { background: var(--sharp); border-color: var(--sharp); }
+.notes button[data-iv][aria-pressed="true"] { outline: 2px solid var(--fg); outline-offset: 1px; }
+.ivkey { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 12px; color: var(--muted); }
+.ivkey i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .row label { color: var(--muted); font-size: 12px; }
 select, input[type=range] { accent-color: var(--stone); }
@@ -136,6 +148,9 @@ table.mx th { color: var(--muted); font-weight: 500; }
           <label for="oct">Octave</label>
           <select id="oct"><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select>
         </div>
+        <div class="ivkey" id="ivkey"><span id="ivwho">Hover a post on the map to see how each note sits against it.</span>
+          <span><i style="background:var(--perfect)"></i>perfect consonance</span><span><i style="background:var(--imperfect)"></i>imperfect consonance</span>
+          <span><i style="background:var(--mild)"></i>mild dissonance</span><span><i style="background:var(--sharp)"></i>sharp dissonance</span></div>
         <p class="hint" id="notehint">Pick a note, then click the map to place a post. Hold Shift while drawing walls to keep them straight.</p>
       </div>
 
@@ -698,11 +713,20 @@ table.mx th { color: var(--muted); font-weight: 500; }
     };
     notes$.appendChild(b);
   });
+  // the textbook interval classes, by distance in semitones within the octave:
+  // perfect unison/octave, fourth, fifth; imperfect thirds and sixths; mild seconds and sevenths a whole tone off;
+  // sharp the semitone, the major seventh and the tritone
+  const IV_CLASS = ['perfect', 'sharp', 'mild', 'imperfect', 'imperfect', 'perfect', 'sharp', 'perfect', 'imperfect', 'imperfect', 'mild', 'sharp'];
+  let hoverPost = null;
   function renderNotes() {
     [...notes$.children].forEach((c, i) => {
-      const on = tool === 'leaf' ? chord.has((octave - 2) * 12 + i) : i === note;
+      const s = (octave - 2) * 12 + i;
+      const on = tool === 'leaf' ? chord.has(s) : i === note;
       c.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (hoverPost) c.setAttribute('data-iv', IV_CLASS[(((s - hoverPost.s) % 12) + 12) % 12]); else c.removeAttribute('data-iv');
     });
+    document.getElementById('ivwho').textContent = hoverPost
+      ? 'Against post ' + label(hoverPost.s) + ':' : 'Hover a post on the map to see how each note sits against it.';
     const cv = document.getElementById('chordv');
     cv.hidden = tool !== 'leaf';
     cv.textContent = 'Chord: ' + [...chord].sort((a, b) => a - b).map(label).join(' ');
@@ -940,7 +964,14 @@ table.mx th { color: var(--muted); font-weight: 500; }
     return wallsChanged;
   }
   view$.addEventListener('pointerdown', ev => { painting = true; view$.setPointerCapture(ev.pointerId); stroke(ev, true); });
-  view$.addEventListener('pointermove', ev => { const c = cellAt(ev); hover = c ? c[1] * W + c[0] : -1; if (painting) stroke(ev, false); });
+  view$.addEventListener('pointermove', ev => {
+    const c = cellAt(ev); hover = c ? c[1] * W + c[0] : -1;
+    // the note picker lights up against whichever post is under the mouse (within two cells, nearest wins)
+    let near = null, best = 2.5;
+    if (c) for (const p of posts) { const d = Math.hypot(p.x - c[0], p.y - c[1]); if (d < best) { best = d; near = p; } }
+    if (near !== hoverPost) { hoverPost = near; renderNotes(); }
+    if (painting) stroke(ev, false);
+  });
   // however the stroke ends (button up, the browser cancelling it, losing the pointer), lay the straight run and clear the preview
   function endStroke() {
     if (!painting) return;
@@ -952,7 +983,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
   view$.addEventListener('lostpointercapture', endStroke);
   window.addEventListener('pointerup', endStroke);
   window.addEventListener('blur', endStroke);
-  view$.addEventListener('pointerleave', () => { hover = -1; probe$.innerHTML = PROBE_IDLE; });
+  view$.addEventListener('pointerleave', () => { hover = -1; probe$.innerHTML = PROBE_IDLE; if (hoverPost) { hoverPost = null; renderNotes(); } });
 
   // ---------- presets ----------
   function box(x0, y0, x1, y1) { for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) wall[y * W + x] = 1; }
