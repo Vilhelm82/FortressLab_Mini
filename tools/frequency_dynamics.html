@@ -99,7 +99,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
 .hint { color: var(--muted); font-size: 12px; margin: 0; }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
 .sw-leaf { background: var(--calm); height: 10px; width: 10px; border-radius: 50% 0; }
-#sound[aria-pressed="true"], #cw[aria-pressed="true"] { border-color: var(--calm); color: var(--calm); }
+#sound[aria-pressed="true"], #cw[aria-pressed="true"], #rt[aria-pressed="true"] { border-color: var(--calm); color: var(--calm); }
 .chordv { font-family: var(--font-data); font-size: 12px; color: var(--calm); min-height: 1.4em; }
 </style>
 
@@ -230,6 +230,10 @@ table.mx th { color: var(--muted); font-weight: 500; }
           <label for="speed">Speed</label>
           <input id="speed" type="range" min="0" max="100" value="85">
           <span class="hint" id="speedv">4 steps a frame</span>
+        </div>
+        <div class="row">
+          <button id="rt" aria-pressed="false">Real time</button>
+          <span class="hint" id="rtv">Off: the speed slider sets the pace.</span>
         </div>
         <div class="row">
           <label for="cur">Current</label>
@@ -886,6 +890,14 @@ table.mx th { color: var(--muted); font-weight: 500; }
   document.getElementById('reset').onclick = resetWaves;
   document.getElementById('edge').onchange = e => { edgeOpen = e.target.value === 'open'; rebuild(); };
   // log scale from one step every 50 frames (barely moving) up to 10 steps a frame
+  document.getElementById('rt').onclick = () => {
+    realTime = !realTime; pending = 0;
+    document.getElementById('rt').setAttribute('aria-pressed', realTime ? 'true' : 'false');
+    document.getElementById('speed').disabled = realTime;
+    document.getElementById('rtv').textContent = realTime
+      ? `On: A4 vibrates ${RT_HZ_A4.toFixed(2)} times a second, every note at its true rate a hundred times slower (${RT_STEPS_PER_SEC.toFixed(1)} steps a second).`
+      : 'Off: the speed slider sets the pace.';
+  };
   document.getElementById('speed').oninput = e => {
     speed = 0.02 * Math.pow(500, +e.target.value / 100);
     document.getElementById('speedv').textContent = speed >= 1
@@ -1046,8 +1058,19 @@ table.mx th { color: var(--muted); font-weight: 500; }
   window.addEventListener('pagehide', saveMap);
 
   // ---------- loop ----------
-  function frame() {
-    if (running) { pending += speed; while (pending >= 1) { step(); pending -= 1; } }
+  // Real time: the clock runs off the wall clock at a hundredth of true pitch, so A4 really vibrates 4.40 times a
+  // second on screen, C4 2.62, C2 0.65, each note at its own true rate. All of them still travel at the same speed,
+  // as sound does in air. At this scale a cell is about 7 cm and the map an 11 m room, slowed a hundred times.
+  const RT_HZ_A4 = 4.40, RT_STEPS_PER_SEC = RT_HZ_A4 * LAMBDA_A4 / WAVE_C;   // one A4 period is LAMBDA_A4 / WAVE_C steps
+  let realTime = false, lastTs = null;
+  function frame(ts) {
+    const dt = lastTs === null || ts === undefined ? 0 : Math.min(0.1, (ts - lastTs) / 1000);
+    lastTs = ts === undefined ? null : ts;
+    if (running) {
+      pending += realTime ? dt * RT_STEPS_PER_SEC : speed;
+      let n = 0; while (pending >= 1 && n < 40) { step(); pending -= 1; n++; }
+      if (pending >= 1) pending = 0;   // the machine couldn't keep up this frame: drop the backlog rather than spiral
+    }
     draw(); drawProbe(); updateSound();
     document.getElementById('clock').textContent = `t = ${t}`;
     requestAnimationFrame(frame);
