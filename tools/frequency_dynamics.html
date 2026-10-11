@@ -478,25 +478,29 @@ table.mx th { color: var(--muted); font-weight: 500; }
       let c;
       if (wall[i]) c = COL.bg;
       else if (view === 'colour') {
-        // Each source's waves drawn in their own colours. Which wave a crest is comes from how far it has
-        // travelled from its source, snapped to the real crest using the wave's own phase in this cell.
-        // Echoes off walls take the colour of the wave due at that distance, not the one that bounced.
+        // The real water, coloured. Brightness comes from all the waves added together, so where a crest meets a
+        // trough they cancel and the water goes dark, exactly as in the Water view. The colour comes from the
+        // sources pushing the water the way it's actually going in this cell, each in its own wave colour.
+        // Which wave a crest is comes from how far it has travelled from its source, snapped to the real crest
+        // using the wave's own phase here; echoes take the colour of the wave due at that distance.
         const x = i % W, y = (i / W) | 0;
-        let r0 = COL.deep[0], g0 = COL.deep[1], b0 = COL.deep[2];
-        for (const L of layers.values()) {
+        let v = 0; for (const L of layers.values()) v += L.u[i];
+        mC = Math.max(mC, Math.abs(v));
+        const kk = Math.max(-1, Math.min(1, v / gColour)), sign = v >= 0 ? 1 : -1;
+        let wr = 0, wg = 0, wb = 0, ws = 0;
+        if (Math.abs(kk) > 0.02) for (const L of layers.values()) {
           const src = L.src; if (src.muted) continue;
-          const u = L.u[i]; mC = Math.max(mC, Math.abs(u));
-          const w = Math.max(-1, Math.min(1, u / gColour)); if (Math.abs(w) < 0.02) continue;
-          const sx = src.x, sy = src.y;
-          const k = L.omega / WAVE_C, geo = L.omega * t - k * Math.hypot(x - sx, y - sy);
+          const u = L.u[i], wgt = u * sign; if (wgt <= 0) continue;
+          const k = L.omega / WAVE_C, geo = L.omega * t - k * Math.hypot(x - src.x, y - src.y);
           const psi = Math.atan2(u, (u - L.up[i]) / L.omega);
           let d = (psi - geo) % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI;
           const n = Math.round((geo + d - Math.PI / 2) / (2 * Math.PI));
           const look = lookOf(src), col = look.rgb[((n % look.len) + look.len) % look.len];
-          if (w > 0) { r0 += w * (col[0] - COL.deep[0]); g0 += w * (col[1] - COL.deep[1]); b0 += w * (col[2] - COL.deep[2]); }
-          else { r0 *= 1 + 0.6 * w; g0 *= 1 + 0.6 * w; b0 *= 1 + 0.6 * w; }
+          wr += wgt * col[0]; wg += wgt * col[1]; wb += wgt * col[2]; ws += wgt;
         }
-        c = [Math.min(255, Math.max(0, r0)), Math.min(255, Math.max(0, g0)), Math.min(255, Math.max(0, b0))];
+        if (kk > 0 && ws > 0) c = mix(COL.deep, [wr / ws, wg / ws, wb / ws], kk);
+        else if (kk < 0) c = COL.deep.map(ch => ch * (1 + 0.75 * kk));
+        else c = COL.deep;
       }
       else if (view === 'water') {
         let v = 0; for (const L of layers.values()) v += L.u[i];
@@ -519,7 +523,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
     }
     // auto gain: rises instantly, falls slowly, so the picture stays readable as the tank fills
     if (view === 'water') gWater = Math.max(mW, gWater * 0.985, 1e-3);
-    else if (view === 'colour') gColour = Math.max(mC * 0.8, gColour * 0.985, 1e-3);
+    else if (view === 'colour') gColour = Math.max(mC, gColour * 0.985, 1e-3);
     else { gS = Math.max(mS, gS * 0.985, 1e-3); gR = Math.max(mR, gR * 0.985, 1e-3); }
     octx.putImageData(img, 0, 0);
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
@@ -796,7 +800,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
     water: '<span class="swatch sw-water"></span>the raw water: trough to crest, all notes added together',
     harm: '<span class="swatch sw-harm"></span>calm and constructive to turbulent, brightness is strength',
     turb: '<span class="swatch" style="background:linear-gradient(90deg,var(--deep),var(--turb))"></span>turbulence only',
-    colour: '<span class="swatch" style="background:linear-gradient(90deg,#e8606a,#e8c060,#60e8a0,#60a8e8,#b060e8)"></span>each source\'s waves in their own colours'
+    colour: '<span class="swatch" style="background:linear-gradient(90deg,#e8606a,#e8c060,#60e8a0,#60a8e8,#b060e8)"></span>the real water, crests coloured by the source making them'
   };
   function setView(n) { view = n; ['water', 'harm', 'turb', 'colour'].forEach(k => document.getElementById('v-' + k).setAttribute('aria-pressed', k === n ? 'true' : 'false')); document.getElementById('leg').innerHTML = LEG[n]; }
   ['water', 'harm', 'turb', 'colour'].forEach(k => document.getElementById('v-' + k).onclick = () => setView(k));
