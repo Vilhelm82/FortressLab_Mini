@@ -166,8 +166,12 @@ table.mx th { color: var(--muted); font-weight: 500; }
 
       <div class="card">
         <h2>Clash between the notes in play</h2>
+        <div class="seg" role="group" aria-label="How clash is measured">
+          <button id="m-ear" aria-pressed="true">Ear: roughness</button>
+          <button id="m-wave" aria-pressed="false">Waves: ratio</button>
+        </div>
         <div class="mx-box" id="mx"></div>
-        <p class="hint">0 is perfect agreement, 1 is the harshest clash in the range. Worked out from overlapping overtones, not a lookup table.</p>
+        <p class="hint" id="mxhint"></p>
       </div>
 
       <div class="card">
@@ -246,10 +250,37 @@ table.mx th { color: var(--muted); font-weight: 500; }
       t += roughPair(freqHz(a) * (p + 1), Math.pow(DECAY, p), freqHz(b) * (q + 1), Math.pow(DECAY, q));
     return t;
   }
-  const D = []; let dmax = 0;
-  for (let a = 0; a < NOTE_COUNT; a++) { D[a] = []; for (let b = 0; b < NOTE_COUNT; b++) {
-    const v = Math.max(0, cross(a, b) - 0.5 * (cross(a, a) + cross(b, b))); D[a][b] = v; if (v > dmax) dmax = v; } }
-  for (let a = 0; a < NOTE_COUNT; a++) for (let b = 0; b < NOTE_COUNT; b++) D[a][b] /= dmax;
+  const D_EAR = []; let dmax = 0;
+  for (let a = 0; a < NOTE_COUNT; a++) { D_EAR[a] = []; for (let b = 0; b < NOTE_COUNT; b++) {
+    const v = Math.max(0, cross(a, b) - 0.5 * (cross(a, a) + cross(b, b))); D_EAR[a][b] = v; if (v > dmax) dmax = v; } }
+  for (let a = 0; a < NOTE_COUNT; a++) for (let b = 0; b < NOTE_COUNT; b++) D_EAR[a][b] /= dmax;
+
+  // ---------- consonance, from how well the waves line up ----------
+  // Two notes in a simple whole-number ratio share overtones exactly and their combined wave repeats quickly;
+  // a complicated ratio barely repeats at all. Each interval is matched to the simplest ratio of 2s, 3s and 5s
+  // it sits near (classic Western tuning), scored by how big that ratio's numbers are, log2(p*q), plus a cost
+  // for how far the real equal-tempered pitch drifts from it. Same in every octave: the field is water, not an ear.
+  const DRIFT_CENTS = 15;   // how much drift from a ratio costs as much as one step of complexity
+  const FIVE = []; for (let a = 1; a <= 4096; a *= 2) for (let b = a; b <= 4096; b *= 3) for (let c = b; c <= 4096; c *= 5) FIVE.push(c);
+  const gcd = (x, y) => y ? gcd(y, x % y) : x;
+  const ratioOf = [];
+  function waveScore(n) {
+    let best = Infinity, ratio = '';
+    for (const p of FIVE) for (const q of FIVE) {
+      if (p < q || gcd(p, q) !== 1) continue;
+      const err = Math.abs(1200 * Math.log2(p / q) - 100 * n);
+      if (err > 50) continue;
+      const sc = Math.log2(p * q) + Math.pow(err / DRIFT_CENTS, 2);
+      if (sc < best) { best = sc; ratio = p + ':' + q; }
+    }
+    ratioOf[n] = ratio; return best;
+  }
+  const byGap = []; let wmax = 0;
+  for (let n = 0; n < NOTE_COUNT; n++) { byGap[n] = waveScore(n); wmax = Math.max(wmax, byGap[n]); }
+  const D_WAVE = [];
+  for (let a = 0; a < NOTE_COUNT; a++) { D_WAVE[a] = []; for (let b = 0; b < NOTE_COUNT; b++) D_WAVE[a][b] = byGap[Math.abs(b - a)] / wmax; }
+
+  let D = D_EAR, measure = 'ear';
 
   // ---------- state ----------
   let wall = new Uint8Array(N);
@@ -381,13 +412,15 @@ table.mx th { color: var(--muted); font-weight: 500; }
   // ---------- reading a cell ----------
   // per note strength, total strength, roughness (pairwise clash weighted by both strengths)
   const Ns = () => [...notes.values()];
+  // clash is the strength-weighted average clash over every pair of notes present, so a full chord isn't
+  // scored as rougher than a lone pair just because it has more pairs; a single note is perfectly calm
   function cellRead(i, arr) {
-    let E = 0, R = 0;
+    let E = 0, R = 0, P = 0;
     for (let a = 0; a < arr.length; a++) {
       const A = Math.sqrt(2 * arr[a].e[i]); E += A * A;
-      for (let b = a + 1; b < arr.length; b++) R += A * Math.sqrt(2 * arr[b].e[i]) * D[arr[a].s][arr[b].s];
+      for (let b = a + 1; b < arr.length; b++) { const w = A * Math.sqrt(2 * arr[b].e[i]); P += w; R += w * D[arr[a].s][arr[b].s]; }
     }
-    return { E, R };
+    return { E, R, clash: P > 1e-12 ? R / P : 0 };
   }
 
   // ---------- drawing ----------
@@ -421,11 +454,11 @@ table.mx th { color: var(--muted); font-weight: 500; }
         const k = Math.max(-1, Math.min(1, v / gWater));
         c = mix(COL.deep, COL.crest, 0.5 + 0.5 * k);
       } else {
-        const { E, R } = cellRead(i, arr);
+        const { E, R, clash } = cellRead(i, arr);
         const S = Math.sqrt(E); mS = Math.max(mS, S); mR = Math.max(mR, R);
         if (view === 'harm') {
           const b = Math.min(1, Math.sqrt(S / gS));
-          const r = Math.min(1, (R / (E + 1e-12)) / 0.5);
+          const r = Math.min(1, clash * clash);   // squared, so consonant chords sit calm and only real clashes run hot
           c = mix(COL.deep, mix(COL.calm, COL.turb, r), b);
         } else {
           const r = Math.min(1, Math.sqrt(R / gR));
@@ -484,14 +517,13 @@ table.mx th { color: var(--muted); font-weight: 500; }
     if (wall[hover]) { probe$.innerHTML = '<span class="empty">Wall.</span>'; return; }
     const amps = arr.map(n => [n.s, Math.sqrt(2 * n.e[hover])]).sort((a, b) => a[0] - b[0]);
     const top = Math.max(1e-9, ...amps.map(a => a[1]));
-    const { E, R } = cellRead(hover, arr);
-    const r = E > 1e-12 ? R / E : 0;
-    const verdict = E < 1e-8 ? 'still water' : r < 0.06 ? 'calm, constructive' : r < 0.18 ? 'choppy' : 'turbulent';
+    const { E, clash: r } = cellRead(hover, arr);
+    const verdict = E < 1e-8 ? 'still water' : r < 0.5 ? 'calm, constructive' : r < 0.7 ? 'tense' : 'turbulent';
     const x = hover % W, y = (hover / W) | 0;
     probe$.innerHTML =
       `<div>cell ${x}, ${y}</div>` +
       amps.map(([s, a]) => `<div class="bar"><span>${label(s)}</span><span><i style="width:${(100 * a / top).toFixed(0)}%"></i></span><span>${a.toFixed(3)}</span></div>`).join('') +
-      `<div>clash ratio ${r.toFixed(3)} · <span class="verdict">${verdict}</span></div>`;
+      `<div>clash ${r.toFixed(2)} · <span class="verdict">${verdict}</span></div>`;
   }
 
   // ---------- sound: hear the water under the cursor ----------
@@ -609,14 +641,28 @@ table.mx th { color: var(--muted); font-weight: 500; }
     for (const a of ss) {
       h += `<tr><th>${label(a)}</th>`;
       for (const b of ss) {
-        const v = D[a][b];
-        h += a === b ? '<td style="color:var(--muted)">·</td>' : `<td style="color:${rgb(mix(COL.calm, COL.turb, Math.min(1, v)))}">${v.toFixed(2)}</td>`;
+        const v = D[a][b], tip = measure === 'wave' ? ` title="${ratioOf[Math.abs(b - a)]}"` : '';
+        h += a === b ? '<td style="color:var(--muted)">·</td>' : `<td${tip} style="color:${rgb(mix(COL.calm, COL.turb, Math.min(1, v)))}">${v.toFixed(2)}</td>`;
       }
       h += '</tr>';
     }
     el.innerHTML = h + '</table>';
   }
   function changed() { syncLayers(); renderPosts(); renderMatrix(); }
+
+  // ---------- which clash measure ----------
+  const MX_HINT = {
+    ear: '0 is perfect agreement, 1 the harshest clash in the range. Ear: how much the notes\' overtones beat against each other in human hearing, which also counts low, crowded notes as rough.',
+    wave: '0 is perfect agreement, 1 the harshest clash in the range. Waves: how simple a ratio the two notes form (hover a number to see it), plus a cost for equal-tempered drift. The same in every octave.'
+  };
+  function setMeasure(m) {
+    measure = m; D = m === 'wave' ? D_WAVE : D_EAR;
+    $('m-ear').setAttribute('aria-pressed', m === 'ear' ? 'true' : 'false');
+    $('m-wave').setAttribute('aria-pressed', m === 'wave' ? 'true' : 'false');
+    $('mxhint').textContent = MX_HINT[m];
+    try { localStorage.setItem('fds-measure', m); } catch (e) {}
+    renderMatrix();
+  }
 
   // ---------- tuning one source's sound ----------
   const $ = id => document.getElementById(id);
@@ -646,6 +692,8 @@ table.mx th { color: var(--muted); font-weight: 500; }
   tuneInput('s-vol', (s, v) => { s.vol = +v / 100; });
   tuneInput('s-verb', (s, v) => { s.verb = +v / 100; });
   $('s-all').onclick = () => { if (!sel) return; for (const o of [...posts, ...leaves]) if (o !== sel) o.snd = { ...sel.snd }; };
+  $('m-ear').onclick = () => setMeasure('ear');
+  $('m-wave').onclick = () => setMeasure('wave');
   $('m-vol').oninput = e => { masterVol = +e.target.value / 100; };
   $('m-room').oninput = e => { room = +e.target.value / 10; $('m-roomv').textContent = room.toFixed(1) + ' s'; };
   $('m-room').onchange = () => { if (actx) makeRoom(room); };
@@ -833,6 +881,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
   }
   window.addEventListener('resize', size);
   size(); setTool('wall'); if (!restoreMap()) loadPreset('courtyard');
+  { let m = 'ear'; try { m = localStorage.getItem('fds-measure') || 'ear'; } catch (e) {} setMeasure(m === 'wave' ? 'wave' : 'ear'); }
   // warm the tank up so the first view already shows the field rather than an empty map
   for (let k = 0; k < 500; k++) step();
   warming = false;
