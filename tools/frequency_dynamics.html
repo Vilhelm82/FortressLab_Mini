@@ -90,7 +90,10 @@ input[type=color] { width: 44px; height: 30px; padding: 0; border: 1px solid var
 .post button { padding: 3px 8px; font-size: 12px; }
 .empty { color: var(--muted); font-size: 13px; }
 .probe { font-family: var(--font-data); font-size: 12px; display: grid; gap: 5px; }
-.bar { display: grid; grid-template-columns: 34px 1fr 44px; gap: 8px; align-items: center; }
+.bar { display: grid; grid-template-columns: 34px 1fr 44px 38px; gap: 8px; align-items: center; }
+.spec { display: flex; align-items: flex-end; gap: 1px; height: 12px; }
+.spec i { display: block; width: 3px; background: var(--stone); border-radius: 1px; }
+#lcount { font-size: 11px; color: var(--muted); }
 .bar i { display: block; height: 6px; border-radius: 3px; background: var(--calm); }
 .verdict { font-family: var(--font-body); font-weight: 600; }
 table.mx { border-collapse: collapse; font-family: var(--font-data); font-size: 11px; font-variant-numeric: tabular-nums; }
@@ -214,7 +217,7 @@ details[open] { display: grid; gap: 8px; }
       </div>
 
       <div class="card">
-        <h2>On the map</h2>
+        <div class="cardhead"><h2>On the map</h2><span class="val clock" id="lcount"></span></div>
         <div class="posts" id="posts"></div>
       </div>
 
@@ -225,14 +228,14 @@ details[open] { display: grid; gap: 8px; }
           <div class="tune">
             <h3>In the field</h3>
             <div class="ctl"><label for="s-vol">Gain</label><input id="s-vol" type="range" min="-40" max="12" step="1" value="0"><span class="val" id="s-volv"></span></div>
+            <div class="ctl"><label for="s-shape">Waveform</label>
+              <select id="s-shape"><option value="overtones">Field tone (8 overtones)</option><option value="sine">Sine</option><option value="triangle">Triangle</option><option value="sawtooth">Saw</option><option value="square">Square</option></select><span class="val" id="s-shapev"></span></div>
             <div id="pitchbox" class="tune">
               <h3 class="h3row">Pitch <span class="val" id="s-pitchv"></span></h3>
               <div class="ctl wide"><label for="s-pitch" id="s-pitchl">Octave 4</label><input id="s-pitch" type="range" min="0" max="1200" step="1" value="0"></div>
               <div class="btnrow"><button id="p-down">− octave</button><button id="p-snap">Snap</button><button id="p-up">+ octave</button></div>
             </div>
             <h3>Sound</h3>
-            <div class="ctl"><label for="s-shape">Wave</label>
-              <select id="s-shape"><option value="overtones">Field tone (8 overtones)</option><option value="sine">Sine</option><option value="triangle">Triangle</option><option value="sawtooth">Saw</option><option value="square">Square</option></select><span></span></div>
             <div class="ctl"><label for="s-filter">Filter</label>
               <select id="s-filter"><option value="none">Off</option><option value="lowpass">Low pass</option><option value="bandpass">Band pass</option><option value="highpass">High pass</option></select><span></span></div>
             <div class="ctl"><label for="s-cut">Cutoff</label><input id="s-cut" type="range" min="0" max="100" value="60"><span class="val" id="s-cutv"></span></div>
@@ -285,10 +288,12 @@ details[open] { display: grid; gap: 8px; }
           <p class="hint">Drift runs from dissonant regions toward regions consonant with a drifter's chord, faster where that changes more steeply, never faster than the waves travel. A drifter moves at half the drift under it. The Drift setting scales how hard a slope pushes.</p>
           <p class="hint">True pitch runs the clock at a hundredth of real frequency: A4 vibrates 4.40 times a second and every note at its own true rate. A cell is then about 7 cm and the map an 11 m room.</p>
           <p class="hint">Absorption grows with the square of the frequency, so highs fade over distance far faster than lows: B5 loses about 14 times what C4 does. Low notes also bend around walls more, straight out of their longer waves.</p>
-          <p class="hint">The field is computed on your graphics card. It holds up to 16 voices: a source is one, each note of a drifter's chord is one.</p>
+          <p class="hint">Waveform is physical. A source sends out its fundamental and each harmonic of its waveform as separate waves: square has the odd harmonics at 1/n, saw every harmonic at 1/n, triangle the odd ones at 1/n², sine none. Shorter harmonics bend round walls less and fade faster, so a bright waveform goes dull behind walls and over distance. Harmonics too short for the grid are left out; a finer resolution keeps more.</p>
+          <p class="hint">Roughness is measured where you are, from the harmonics that actually arrive there. The table shows it at the sources; behind a wall the same two notes may agree better, because the wall has stripped the harmonics that grated. You hear the same thing: listening plays every harmonic at the strength it arrives.</p>
+          <p class="hint">The field is computed on your graphics card. It holds up to 64 waves: every harmonic of every note is its own wave.</p>
           <p class="hint">Reflections splits every source's field by reflection order. Each order's walls absorb the waves that hit them and hand the same reflection a reflective wall makes to the next order, so direct sound casts true shadows and each order can be seen on its own. Added back together they are exactly the full field. The map boundary is not counted as a reflection.</p>
           <p class="hint">With a reflective boundary and no absorption nothing ever leaves the map. Sound trapped behind walls rings on until absorption takes it.</p>
-          <p class="hint">Gain is how hard a source drives the field, in dB: it changes how far it carries, how much it weighs in dissonance and how it pulls on drifters, and you hear it too. The other Sound and colour settings change what you hear and see only; the dissonance maths and the drifters always use the field's own 8-overtone tone.</p>
+          <p class="hint">Gain is how hard a source drives the field, in dB: it changes how far it carries, how much it weighs in dissonance and how it pulls on drifters, and you hear it too. The Sound settings and colours change what you hear and see only.</p>
         </details>
       </div>
     </aside>
@@ -419,26 +424,70 @@ details[open] { display: grid; gap: 8px; }
     if (!L.rgb || L.rgbOf !== sig) { L.rgb = L.slots.map(hex2rgb); L.echoRgb = L.echo.map(hex2rgb); L.rgbOf = sig; }
     return L;
   }
-  let sel = null;               // the post or leaf whose sound is being tuned
+  let sel = null;               // the source or drifter whose sound is being tuned
 
-  // ---------- the water, on the graphics card ----------
-  // Every post, and every note of every leaf, owns a slot on the GPU. With echoes coloured, a slot holds one layer per
-  // bounce generation: direct waves, 1st bounce, 2nd bounce, and everything after. Otherwise a slot is one layer.
+  // ---------- waveforms are physical ----------
+  // A source's waveform is real in the field: it is sent out as its fundamental plus each harmonic, every harmonic a
+  // wave of its own at its own wavelength. Shorter waves bend round walls less and fade faster, so a waveform changes
+  // shape as it travels. Harmonics too short for the grid are left out.
+  const MAX_HARM = 8, HARM_MIN = 0.03;
+  const SHAPES = {
+    overtones: n => Math.pow(DECAY, n - 1),                             // the field tone: every harmonic, gently fading
+    sine: n => n === 1 ? 1 : 0,
+    triangle: n => n % 2 ? (((n - 1) / 2) % 2 ? -1 : 1) / (n * n) : 0,   // odd harmonics, 1/n², alternating sign
+    sawtooth: n => (n % 2 ? 1 : -1) / n,                                // every harmonic, 1/n
+    square: n => n % 2 ? 1 / n : 0,                                     // odd harmonics, 1/n
+  };
+  // the harmonics of a pitch that the field carries: n, strength, sign (as a half-cycle phase offset) and pitch
+  function partials(shape, s, clip = true) {
+    const f = SHAPES[shape] || SHAPES.overtones, out = [];
+    for (let n = 1; n <= MAX_HARM; n++) {
+      const a = f(n), sn = s + 12 * Math.log2(n);
+      if (Math.abs(a) < HARM_MIN || (clip && n > 1 && sn > maxPitch())) continue;
+      out.push({ n, a: Math.abs(a), off: a < 0 ? Math.PI : 0, s: sn });
+    }
+    return out;
+  }
+  const shapeOf = src => (src.snd && src.snd.shape) || 'overtones';
+  // Roughness between two sets of partials (Plomp-Levelt, Sethares): every partial of one against every partial of the
+  // other, weighted by both strengths and scaled by each set's overall strength. Scaled so the harshest pair of field
+  // tones in C2..B5 is 1.
+  const roughPair1 = (f1, f2) => roughPair(f1, 1, f2, 1);
+  const l2 = P => Math.sqrt(P.reduce((t, p) => t + p.a * p.a, 0));
+  function specRough(A, B) { let t = 0; for (const p of A) for (const q of B) t += p.a * q.a * roughPair1(freqHz(p.s), freqHz(q.s)); return t / (l2(A) * l2(B)); }
+  let dmaxS = 0;
+  for (let a = 0; a < NORM_COUNT; a++) for (let b = a + 1; b < NORM_COUNT; b++)
+    dmaxS = Math.max(dmaxS, specRough(partials('overtones', a, false), partials('overtones', b, false)));
+  const specCache = new Map();
+  function specClash(a, sha, b, shb) {
+    const k = [a, sha, b, shb, gridK].join();
+    let v = specCache.get(k);
+    if (v === undefined) { v = Math.min(1, specRough(partials(sha, a), partials(shb, b)) / dmaxS); specCache.set(k, v); }
+    return v;
+  }
+  // the shape a pitch is sounded with: the first source on it
+  const shapeAt = s => { const o = posts.find(p => p.s === s) || leaves.find(l => l.chord.includes(s)); return o ? shapeOf(o) : 'overtones'; };
+  // the dissonance between two pitches as sounded by their sources, at the source (the table, and what drifters expect)
+  const pitchClash = (a, b) => measure === 'wave' ? clashOf(a, b) : specClash(a, shapeAt(a), b, shapeAt(b));
+
+  // ---------- the field, on the graphics card ----------
+  // Every harmonic of every source (and of every note of every drifter's chord) owns a slot on the GPU. With
+  // reflections coloured, a slot holds one layer per reflection order: direct, 1st, 2nd, and 3rd onward.
   //
-  // Bounce generations: a generation's walls absorb what hits them (a one-way boundary, Mur's first order) and hand
-  // exactly the reflection a hard wall would have made to the next generation. The last generation keeps hard walls.
-  // Added up, the generations are exactly the real water; each one on its own is the waves that have bounced that
-  // many times, with true shadows behind walls.
-  const MAXL = 16, GENS_ECHO = 4, MW = 64, MH = 40, MAXPTS = 64;
-  let layers = new Map();       // key -> {key, s, src, slot, omega, phase, fPrev}
+  // Reflection orders: an order's walls absorb what hits them (a one-way boundary, Mur's first order) and hand exactly
+  // the reflection a reflective wall would have made to the next order. The last order keeps reflective walls. Added
+  // up, the orders are exactly the full field; each on its own is the sound that has reflected that many times.
+  const MAXL = 64, GENS_ECHO = 4, MW = 64, MH = 40, MAXPTS = 64, MAXPAIRS = 2048;
+  let layers = new Map();       // key -> {key, src, voice, s (fundamental), n, a, off, slot, omega, fPrev}
+  let voices = new Map();       // source voice key -> {phase, omega}: one running phase per sung note, shared by its harmonics
   let t = 0, running = true, tool = 'wall', view = 'harm', note = 0, octave = 4;
   let chord = new Set([24, 28, 31]);   // C4 E4 G4
   let edgeOpen = true, air = 0, speed = 4, pending = 0, kappa = 0.5 * Math.pow(1000, 0.5);
-  let warming = true, echoes = false, GEN = 1;
+  let warming = true, echoes = false, GEN = 1, cap = 0;
 
-  const view$ = document.getElementById('view');            // the overlay: walls, posts, leaves, and where you click
+  const view$ = document.getElementById('view');            // the overlay: walls, sources, drifters, and where you click
   const ctx = view$.getContext('2d');
-  const glcv = document.getElementById('gl');               // the water itself
+  const glcv = document.getElementById('gl');               // the field itself
   const gl = glcv.getContext('webgl2', { antialias: false, depth: false, stencil: false, premultipliedAlpha: false });
   let GPU_OK = !!gl && !!gl.getExtension('EXT_color_buffer_float');
 
@@ -453,7 +502,7 @@ details[open] { display: grid; gap: 8px; }
   const ivec2 D4[4] = ivec2[4](ivec2(-1,0), ivec2(1,0), ivec2(0,-1), ivec2(0,1));
   `;
 
-  // one step of one layer: the wave update, the absorbing (or hard) walls, the hand-over from the previous generation
+  // one step of one layer: the wave update, the absorbing (or reflective) walls, the hand-over from the previous order
   const FS_STEP = HEAD + `
   uniform sampler2DArray uS; uniform int uSlice, uPrev, uSponge; uniform bool uMur, uOpen;
   uniform float uAir, uSmax, uC2, uPush; uniform ivec2 uSrc;
@@ -471,10 +520,10 @@ details[open] { display: grid; gap: 8px; }
     float prevU = uPrev >= 0 ? texelFetch(uS, ivec3(p, uPrev), 0).r : 0.;
     for (int k = 0; k < 4; k++) {
       ivec2 q = p + D4[k];
-      if (!inside(q)) continue;                                   // the map edge mirrors: no slope across it
+      if (!inside(q)) continue;                                   // the map boundary mirrors: no slope across it
       if (wallAt(q)) {
         if (uMur) lap += texelFetch(uS, ivec3(q, uSlice), 0).r - u;                  // absorbing wall
-        if (uPrev >= 0) lap += prevU - texelFetch(uS, ivec3(q, uPrev), 0).r;          // the previous generation's reflection
+        if (uPrev >= 0) lap += prevU - texelFetch(uS, ivec3(q, uPrev), 0).r;          // the previous order's reflection
       } else lap += texelFetch(uS, ivec3(q, uSlice), 0).r - u;
     }
     float s = sponge(p) + uAir;
@@ -483,7 +532,7 @@ details[open] { display: grid; gap: 8px; }
     o = vec4(un, u, 0., 0.);
   }`;
 
-  // the absorbing walls: each wall cell next to water takes the value a wave leaving through it would have
+  // the absorbing walls: each wall cell next to open field takes the value a wave leaving through it would have
   const FS_GHOST = HEAD + `
   uniform sampler2DArray uS; uniform int uSlice; uniform bool uMur; uniform float uK;
   void main() {
@@ -501,42 +550,57 @@ details[open] { display: grid; gap: 8px; }
     o = vec4(n > 0 ? sum / float(n) : 0., c.r, 0., 0.);
   }`;
 
-  // shared reading of the water at a cell: every layer's total, every note group's strength, the clash between them
+  // Reading the field at a cell. Layers of one harmonic of one pitch (from several sources) add up as real waves into
+  // a component; each component has an exact strength. Dissonance is measured from the components actually present:
+  // every pair of components from different pitches, weighted by both strengths and by how rough the pair is.
   const READ = `
-  uniform sampler2DArray uS; uniform sampler2D uInfo; uniform sampler2D uLut; uniform sampler2D uClash;
-  uniform int uNL, uNG, uGEN;
+  uniform sampler2DArray uS; uniform sampler2D uInfo; uniform sampler2D uLut; uniform sampler2D uPairs;
+  uniform int uNL, uNC, uNG, uNP, uGEN, uRatio;
   const float PI = 3.14159265, TAU = 6.2831853;
   vec4 info(int i, int r) { return texelFetch(uInfo, ivec2(i, r), 0); }
   vec4 gen(int i, int g, ivec2 p) { return texelFetch(uS, ivec3(p, int(info(i, 1).x) * uGEN + g), 0); }
-  // the exact height of a single-pitch wave from two steps of it: law of cosines on the phasor
+  // the exact height of a single-frequency wave from two steps of it: law of cosines on the phasor
   float ampOf(float u, float up, float w) { float s = sin(w); return sqrt(max(0., u * u + up * up - 2. * u * up * cos(w)) / (s * s)); }
-  float clashG(int a, int b) { return texelFetch(uClash, ivec2(a, b), 0).r; }
   vec3 lut(int i, int k) { return texelFetch(uLut, ivec2(k, i), 0).rgb; }
+  // the colour of the wave of layer i passing through: which wave of its source's fundamental it belongs to
   vec3 waveCol(int i, ivec2 p, float u, float up) {
-    vec4 a = info(i, 0); float w = a.w;
-    float geo = a.z - (w / 0.5) * length(vec2(p) - a.xy);
-    float psi = atan(u, (u - up) / w);
-    float d = mod(psi - geo + PI, TAU) - PI;
-    float n = floor((geo + d - 0.5 * PI) / TAU + 0.5);
-    float len = info(i, 1).w;
-    return lut(i, int(mod(n, len)));
+    vec4 a = info(i, 0), f = info(i, 2);
+    float d = length(vec2(p) - a.xy), n;
+    if (f.z < 1.5) {
+      float w = a.w, geo = a.z - (w / 0.5) * d, psi = atan(u, (u - up) / w);
+      float dd = mod(psi - geo + PI, TAU) - PI;
+      n = floor((geo + dd - 0.5 * PI) / TAU + 0.5);
+    } else n = floor((f.x - (f.y / 0.5) * d - 0.5 * PI) / TAU + 0.5);
+    return lut(i, int(mod(n, info(i, 1).w)));
   }
-  float tu[16], tup[16], A[16];
+  float tu[64], tup[64], cu[64], cup[64], Ac[64], cd[64], Wg[64];
   float E, R, P, V, S;
   void readCell(ivec2 p) {
     V = 0.;
+    for (int c = 0; c < uNC; c++) { cu[c] = 0.; cup[c] = 0.; cd[c] = 0.; }
+    for (int g = 0; g < uNG; g++) Wg[g] = 0.;
     for (int i = 0; i < uNL; i++) {
       float a = 0., b = 0.;
       for (int g = 0; g < uGEN; g++) { vec4 q = gen(i, g, p); a += q.r; b += q.g; }
       tu[i] = a; tup[i] = b; V += a;
+      int c = int(info(i, 1).y); cu[c] += a; cup[c] += b;
     }
-    E = 0.; R = 0.; P = 0.;
-    for (int g = 0; g < uNG; g++) {
-      float a = 0., b = 0., w = 1.;
-      for (int i = 0; i < uNL; i++) if (int(info(i, 1).y) == g) { a += tu[i]; b += tup[i]; w = info(i, 0).w; }
-      A[g] = ampOf(a, b, w); E += A[g] * A[g];
+    E = 0.;
+    for (int c = 0; c < uNC; c++) {
+      vec4 ci = info(c, 3);
+      float A = ampOf(cu[c], cup[c], ci.z); Ac[c] = A; E += A * A;
+      int g = int(ci.x);
+      if (uRatio == 1) { if (ci.y < 1.5) Wg[g] = A; } else Wg[g] += A * A;
     }
-    for (int x = 0; x < uNG; x++) for (int y = x + 1; y < uNG; y++) { float w = A[x] * A[y]; P += w; R += w * clashG(x, y); }
+    float sw = 0., sw2 = 0.;
+    for (int g = 0; g < uNG; g++) { float w = uRatio == 1 ? Wg[g] : sqrt(Wg[g]); Wg[g] = w; sw += w; sw2 += w * w; }
+    P = 0.5 * (sw * sw - sw2);
+    R = 0.;
+    for (int k = 0; k < uNP; k++) {
+      vec4 q = texelFetch(uPairs, ivec2(k, 0), 0);
+      int a = int(q.x), b = int(q.y);
+      R += Ac[a] * Ac[b] * q.z; cd[a] += Ac[b] * q.z; cd[b] += Ac[a] * q.z;
+    }
     S = sqrt(E);
   }`;
 
@@ -545,15 +609,15 @@ details[open] { display: grid; gap: 8px; }
   uniform int uView; uniform bool uCW; uniform float uGW, uGS, uGR, uGC;
   uniform vec3 uDeep, uCrest, uCalm, uTurb, uBg;
   vec3 mixc(vec3 a, vec3 b, float k) { return a + (b - a) * k; }
+  vec3 orderCol(int i, int g, ivec2 p, vec4 q) { return g == 0 ? waveCol(i, p, q.r, q.g) : lut(i, 11 + g); }
   void main() {
     ivec2 p = ivec2(int(gl_FragCoord.x), uSize.y - 1 - int(gl_FragCoord.y));
     if (wallAt(p)) { o = vec4(uBg, 1.); return; }
     readCell(p);
-    vec3 c;
-    vec3 acc = vec3(0.); float ws = 0., absParts = 0.;
+    vec3 c, acc = vec3(0.); float ws = 0., absParts = 0.;
     float sgn = V >= 0. ? 1. : -1.;
     if (uView == 0 || uView == 3) {
-      // weights: water by how hard each part moves it, colour view by the parts pushing the way the water is going
+      // weights: displacement by how hard each part moves the field, source colour by the parts pushing the way it's going
       if (uView == 3 || uCW) for (int i = 0; i < uNL; i++) {
         bool muted = info(i, 1).z > 0.5;
         if (uGEN > 1) {
@@ -562,8 +626,7 @@ details[open] { display: grid; gap: 8px; }
             float w = uView == 0 ? abs(q.r) : q.r * sgn;
             absParts += abs(q.r);
             if (muted || w <= 0.) continue;
-            vec3 col = g == 0 ? waveCol(i, p, q.r, q.g) : lut(i, 11 + g);
-            acc += w * col; ws += w;
+            acc += w * orderCol(i, g, p, q); ws += w;
           }
         } else {
           float w = uView == 0 ? abs(tu[i]) : tu[i] * sgn;
@@ -575,7 +638,7 @@ details[open] { display: grid; gap: 8px; }
       if (uView == 0) {
         float k = clamp(V / uGW, -1., 1.);
         vec3 top = uCrest;
-        // only colour as much water as is really there: bounce generations cancel behind walls
+        // only colour as much field as is really there: reflection orders cancel behind walls
         if (uCW && ws > 0.) top = mixc(uCrest, acc / ws, absParts > 1e-9 ? min(1., abs(V) / absParts) : 0.);
         c = mixc(uDeep, top, 0.5 + 0.5 * k);
       } else {
@@ -587,7 +650,7 @@ details[open] { display: grid; gap: 8px; }
     } else if (uView == 1) {
       float b = min(1., sqrt(S / uGS));
       float cl = P > 1e-12 ? R / P : 0.;
-      float r = min(1., cl * cl);                  // squared, so consonant chords sit calm and only real clashes run hot
+      float r = min(1., cl * cl);                  // squared, so consonant chords sit calm and only real dissonance runs hot
       vec3 calm = uCalm;
       if (uCW) {
         for (int i = 0; i < uNL; i++) {
@@ -595,7 +658,7 @@ details[open] { display: grid; gap: 8px; }
           float w0 = info(i, 0).w;
           if (uGEN > 1) for (int g = 0; g < uGEN; g++) {
             vec4 q = gen(i, g, p); float w = ampOf(q.r, q.g, w0);
-            acc += w * (g == 0 ? waveCol(i, p, q.r, q.g) : lut(i, 11 + g)); ws += w;
+            acc += w * orderCol(i, g, p, q); ws += w;
           } else { float w = ampOf(tu[i], tup[i], w0); acc += w * waveCol(i, p, tu[i], tup[i]); ws += w; }
         }
         if (ws > 0.) calm = acc / ws;
@@ -607,17 +670,14 @@ details[open] { display: grid; gap: 8px; }
       if (uCW) {
         for (int i = 0; i < uNL; i++) {
           if (info(i, 1).z > 0.5) continue;
-          float w0 = info(i, 0).w, Ai = ampOf(tu[i], tup[i], w0), q = 0.;
-          int gi = int(info(i, 1).y);
-          for (int j = 0; j < uNL; j++) if (j != i && info(j, 1).z < 0.5) q += ampOf(tu[j], tup[j], info(j, 0).w) * clashG(gi, int(info(j, 1).y));
-          float wt = Ai * q;
+          float w0 = info(i, 0).w, wt = ampOf(tu[i], tup[i], w0) * cd[int(info(i, 1).y)];   // the dissonance this layer brings
           if (uGEN > 1) {
             float tot = 0.; float parts[4];
             for (int g = 0; g < uGEN; g++) { vec4 qq = gen(i, g, p); parts[g] = ampOf(qq.r, qq.g, w0); tot += parts[g]; }
             for (int g = 0; g < uGEN; g++) {
               if (tot <= 0.) break;
               vec4 qq = gen(i, g, p); float w = wt * parts[g] / tot;
-              acc += w * (g == 0 ? waveCol(i, p, qq.r, qq.g) : lut(i, 11 + g)); ws += w;
+              acc += w * orderCol(i, g, p, qq); ws += w;
             }
           } else { acc += wt * waveCol(i, p, tu[i], tup[i]); ws += wt; }
         }
@@ -638,7 +698,7 @@ details[open] { display: grid; gap: 8px; }
     o = vec4(abs(V), S, R, 0.);
   }`;
 
-  // strengths at chosen cells, read back for the probe, the sound and the leaves: one row per layer, then per note group
+  // strengths at chosen cells, read back for the probe, the sound and the drifters: one row per layer, then per component
   const FS_SAMPLE = HEAD + READ + `
   uniform sampler2D uPts;
   void main() {
@@ -647,7 +707,7 @@ details[open] { display: grid; gap: 8px; }
     if (!inside(p) || wallAt(p)) { o = vec4(0.); return; }
     readCell(p);
     if (row < uNL) o = vec4(ampOf(tu[row], tup[row], info(row, 0).w), tu[row], 0., 0.);
-    else o = vec4(A[row - uNL], 0., 0., 0.);
+    else o = vec4(Ac[row - uNL], 0., 0., 0.);
   }`;
 
   function compile(type, src) {
@@ -663,28 +723,45 @@ details[open] { display: grid; gap: 8px; }
     for (let i = 0; i < n; i++) { const a = gl.getActiveUniform(p, i); u[a.name.replace(/\[0\]$/, '')] = gl.getUniformLocation(p, a.name); }
     return { p, u: new Proxy(u, { get: (o, k) => o[k] ?? null }) };
   }
-  let P_STEP, P_GHOST, P_VIEW, P_METRIC, P_SAMPLE, fbo, S0, S1, wallTex, infoTex, lutTex, clashTex, ptsTex, metricTex, sampleTex;
+  let P_STEP, P_GHOST, P_VIEW, P_METRIC, P_SAMPLE, fbo, fbo2, S0, S1, wallTex, infoTex, lutTex, pairsTex, ptsTex, metricTex, sampleTex;
   function texParams(target) {
     gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   }
   function tex2D(fmt, w, h) { const x = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, x); gl.texStorage2D(gl.TEXTURE_2D, 1, fmt, w, h); texParams(gl.TEXTURE_2D); return x; }
-  function texArray(depth) { const x = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D_ARRAY, x); gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA32F, W, H, depth); texParams(gl.TEXTURE_2D_ARRAY); return x; }
+  function texArray(depth) { const x = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D_ARRAY, x); gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RG32F, W, H, depth); texParams(gl.TEXTURE_2D_ARRAY); return x; }
   function initGPU() {
     P_STEP = program(FS_STEP); P_GHOST = program(FS_GHOST); P_VIEW = program(FS_VIEW); P_METRIC = program(FS_METRIC); P_SAMPLE = program(FS_SAMPLE);
     gl.bindVertexArray(gl.createVertexArray());
-    fbo = gl.createFramebuffer();
-    infoTex = tex2D(gl.RGBA32F, MAXL, 2); lutTex = tex2D(gl.RGBA32F, 15, MAXL); clashTex = tex2D(gl.R32F, MAXL, MAXL);
+    fbo = gl.createFramebuffer(); fbo2 = gl.createFramebuffer();
+    infoTex = tex2D(gl.RGBA32F, MAXL, 4); lutTex = tex2D(gl.RGBA32F, 15, MAXL); pairsTex = tex2D(gl.RGBA32F, MAXPAIRS, 1);
     ptsTex = tex2D(gl.RG32F, MAXPTS, 1); metricTex = tex2D(gl.RGBA32F, MW, MH); sampleTex = tex2D(gl.RGBA32F, MAXPTS, 2 * MAXL);
     allocField();
   }
-  // the water and walls at the current grid size; the water starts flat
-  function allocField() {
+  // The field at the current grid size, with room for `cap` slots; it starts flat. Room grows in steps of eight slots
+  // as sources are added, so a few sources don't hold memory for 64.
+  function allocField(slots = 8) {
     for (const x of [S0, S1, wallTex]) if (x) gl.deleteTexture(x);
-    S0 = texArray(MAXL * GEN); S1 = texArray(MAXL * GEN); wallTex = tex2D(gl.R8, W, H);
+    cap = Math.min(MAXL, Math.max(8, Math.ceil(slots / 8) * 8));
+    S0 = texArray(cap * GEN); S1 = texArray(cap * GEN); wallTex = tex2D(gl.R8, W, H);
     glcv.width = W; glcv.height = H;
-    for (let sl = 0; sl < MAXL * GEN; sl++) { clearSlice(S0, sl); clearSlice(S1, sl); }
+    for (let sl = 0; sl < cap * GEN; sl++) { clearSlice(S0, sl); clearSlice(S1, sl); }
     uploadWalls();
+  }
+  // make room for more slots, keeping every wave already in the field
+  function ensureCap(slots) {
+    if (!GPU_OK || slots <= cap) return;
+    const old0 = S0, old1 = S1, oldDepth = cap * GEN;
+    cap = Math.min(MAXL, Math.ceil(slots / 8) * 8);
+    S0 = texArray(cap * GEN); S1 = texArray(cap * GEN);
+    for (const [from, to] of [[old0, S0], [old1, S1]]) for (let sl = 0; sl < cap * GEN; sl++) {
+      if (sl >= oldDepth) { clearSlice(to, sl); continue; }
+      gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fbo2); gl.framebufferTextureLayer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, from, 0, sl);
+      gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, fbo); gl.framebufferTextureLayer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, to, 0, sl);
+      gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    }
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    gl.deleteTexture(old0); gl.deleteTexture(old1);
   }
   function target(texture, slice) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
@@ -692,7 +769,7 @@ details[open] { display: grid; gap: 8px; }
     else gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, texture, 0, slice);
   }
   function clearSlice(texture, slice) { target(texture, slice); gl.clearBufferfv(gl.COLOR, 0, [0, 0, 0, 0]); }
-  function clearSlot(slot) { for (let g = 0; g < GEN; g++) { clearSlice(S0, slot * GEN + g); clearSlice(S1, slot * GEN + g); } }
+  function clearSlot(slot) { if (slot >= cap) return; for (let g = 0; g < GEN; g++) { clearSlice(S0, slot * GEN + g); clearSlice(S1, slot * GEN + g); } }
   function uploadWalls() {
     const d = new Uint8Array(N); for (let i = 0; i < N; i++) d[i] = wall[i] ? 255 : 0;
     gl.bindTexture(gl.TEXTURE_2D, wallTex); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
@@ -705,29 +782,45 @@ details[open] { display: grid; gap: 8px; }
   // the walls changed: tell the GPU and repaint the overlay
   function rebuild() { if (GPU_OK) uploadWalls(); paintWalls(); }
 
-  // every post and every note of every leaf gets its own slot, so each can be heard and tuned on its own
-  function syncLayers() {
+  // what every source and drifter note sends into the field, harmonic by harmonic
+  function wanted() {
     const want = new Map();
-    for (const p of posts) want.set('p' + p.id, [p.s, p]);
-    for (const l of leaves) for (const s of l.chord) want.set('l' + l.id + ':' + s, [s, l]);
+    // s is the fundamental; h.s, the harmonic's own pitch, must not overwrite it
+    const add = (vk, s, src) => { for (const h of partials(shapeOf(src), s)) want.set(vk + '#' + h.n, { ...h, vk, s, src }); };
+    for (const p of posts) add('p' + p.id, p.s, p);
+    for (const l of leaves) for (const s of l.chord) add('l' + l.id + ':' + s, s, l);
+    return want;
+  }
+  const layersNeeded = () => wanted().size;
+  // how many layers a new source (or a changed one) would take
+  const layersFor = (shape, notes) => notes.reduce((n, s) => n + partials(shape, s).length, 0);
+  function syncLayers() {
+    const want = wanted();
     for (const [k, L] of [...layers]) if (!want.has(k)) { if (GPU_OK) clearSlot(L.slot); layers.delete(k); }
     const used = new Set([...layers.values()].map(L => L.slot));
-    for (const [k, [s, src]] of want) {
-      if (layers.has(k)) { layers.get(k).src = src; continue; }
-      let slot = 0; while (used.has(slot)) slot++;
-      if (slot >= MAXL) continue;                    // no room left; placing refuses before it gets here
-      used.add(slot); if (GPU_OK) clearSlot(slot);
-      layers.set(k, { key: k, s, src, slot, fPrev: 0, phase: 0, omega: 2 * Math.PI * (WAVE_C / lambda(s)) });
+    for (const [k, w] of want) {
+      if (!voices.has(w.vk)) voices.set(w.vk, { phase: 0 });
+      const V = voices.get(w.vk); V.omega = 2 * Math.PI * (WAVE_C / lambda(w.s));
+      let L = layers.get(k);
+      if (!L) {
+        let slot = 0; while (used.has(slot)) slot++;
+        if (slot >= MAXL) continue;                    // no room left; placing refuses before it gets here
+        used.add(slot); ensureCap(slot + 1); if (GPU_OK) clearSlot(slot);
+        L = { key: k, slot, fPrev: 0 }; layers.set(k, L);
+      }
+      Object.assign(L, { src: w.src, voice: V, s: w.s, n: w.n, a: w.a, off: w.off, omega: w.n * V.omega });
     }
+    for (const k of [...voices.keys()]) if (![...want.values()].some(w => w.vk === k)) voices.delete(k);
     if (sel && !posts.includes(sel) && !leaves.includes(sel)) { sel = null; renderTune(); }
+    renderCount();
   }
-  const layersNeeded = () => posts.length + leaves.reduce((n, l) => n + l.chord.length, 0);
-  // the distinct pitches in the water, low to high: the note groups the picture and the clash table use
+  function renderCount() { const el = document.getElementById('lcount'); if (el) el.textContent = layers.size + ' / ' + MAXL + ' waves'; }
+  // the distinct fundamentals in the field, low to high: the pitch groups the picture and the dissonance table use
   const pitchesInPlay = () => [...new Set([...layers.values()].map(L => L.s))].sort((a, b) => a - b);
 
   function resetWaves() {
-    if (GPU_OK) for (let sl = 0; sl < MAXL * GEN; sl++) { clearSlice(S0, sl); clearSlice(S1, sl); }
-    for (const L of layers.values()) { L.fPrev = 0; }
+    if (GPU_OK) for (let sl = 0; sl < cap * GEN; sl++) { clearSlice(S0, sl); clearSlice(S1, sl); }
+    for (const L of layers.values()) L.fPrev = 0;
     for (const p of posts) p.env = 0;
     for (const l of leaves) { l.env = 0; l.trail = []; }
   }
@@ -736,14 +829,15 @@ details[open] { display: grid; gap: 8px; }
   const leafCell = l => [Math.round(l.x), Math.round(l.y)];
   const PHASE_WRAP = 2 * Math.PI * 27720;   // whole cycles of every cycle length 1 to 12, so wrapping never shifts a wave colour
   function step() {
-    // Each source fades its song in and out rather than switching it, so muting or unmuting never kicks the water.
+    // Each source fades its song in and out rather than switching it, so muting or unmuting never kicks the field.
     for (const src of [...posts, ...leaves]) {
       const goal = src.muted ? 0 : 1, env = src.env || 0;
       src.env = Math.abs(goal - env) < 1 / RAMP ? goal : env + Math.sign(goal - env) / RAMP;
-      // strength glides to a new setting too, so a slider move never cracks the water like a whip
+      // gain glides to a new setting too, so a slider move never cracks the field like a whip
       const want = src.snd ? src.snd.vol : 1;
       src.volNow = src.volNow === undefined ? want : src.volNow + (want - src.volNow) / 40;
     }
+    for (const V of voices.values()) { V.phase += V.omega; if (V.phase > PHASE_WRAP) V.phase -= PHASE_WRAP; }
     if (!GPU_OK) { t++; return; }
     gl.viewport(0, 0, W, H);
     gl.useProgram(P_STEP.p);
@@ -751,16 +845,15 @@ details[open] { display: grid; gap: 8px; }
     gl.uniform2i(P_STEP.u.uSize, W, H); gl.uniform1i(P_STEP.u.uSponge, SPONGE); gl.uniform1i(P_STEP.u.uOpen, edgeOpen ? 1 : 0);
     gl.uniform1f(P_STEP.u.uSmax, SMAX); gl.uniform1f(P_STEP.u.uC2, C2);
     for (const L of layers.values()) {
-      // A source pushes the water by the step-to-step change of a bounded tone, never by the tone itself, so it adds no
-      // net water. Strength, the fade envelope and the loudness scaling all live inside f, so changing any of them
-      // mid-song still adds none. In flat water a low note's waves come out bigger than a high note's from the same
-      // push; scaling by sqrt(omega) evens that out, so equal Strength means equal wave height whatever the note.
-      L.phase += L.omega; if (L.phase > PHASE_WRAP) L.phase -= PHASE_WRAP;
+      // A source pushes the field by the step-to-step change of a bounded tone, never by the tone itself, so it adds
+      // no net field. Gain, the fade envelope, the harmonic's share of the waveform and the loudness scaling all live
+      // inside f, so changing any of them mid-song still adds none. In flat field a low wave comes out bigger than a
+      // high one from the same push; scaling by sqrt(omega) evens that out, so equal gain means equal wave height.
       const src = L.src;
-      const f = (src.env || 0) * (src.volNow === undefined ? 1 : src.volNow) * Math.sqrt(L.omega / OMEGA_REF) * Math.cos(L.phase) / L.omega;
+      const f = (src.env || 0) * (src.volNow === undefined ? 1 : src.volNow) * L.a * Math.sqrt(L.omega / OMEGA_REF) * Math.cos(L.n * L.voice.phase + L.off) / L.omega;
       const push = AMP * (L.fPrev - f); L.fPrev = f;
       const [sx, sy] = src.chord ? leafCell(src) : [src.x, src.y];
-      gl.uniform1f(P_STEP.u.uAir, air * Math.pow(freqHz(L.s) / 440, 2) / gridK);   // highs fade faster; per step, per base cell
+      gl.uniform1f(P_STEP.u.uAir, air * Math.pow(freqHz(L.s) * L.n / 440, 2) / gridK);   // highs fade faster; per step, per base cell
       for (let g = 0; g < GEN; g++) {
         target(S1, L.slot * GEN + g);
         gl.uniform1i(P_STEP.u.uSlice, L.slot * GEN + g);
@@ -785,76 +878,114 @@ details[open] { display: grid; gap: 8px; }
   }
 
   // ---------- what the CPU tells the GPU about the layers each frame ----------
-  let order = [];   // layers in the order the GPU sees them this frame
+  let order = [], comps = [], groups = [], nPairs = 0;   // this frame's layers, components and pitch groups, as the GPU sees them
   function uploadInfo() {
     order = [...layers.values()];
-    const groups = pitchesInPlay(), gi = s => groups.indexOf(s);
-    const info = new Float32Array(MAXL * 2 * 4), lutD = new Float32Array(15 * MAXL * 4), cl = new Float32Array(MAXL * MAXL);
+    groups = pitchesInPlay();
+    const gi = s => groups.indexOf(s), ck = L => L.s + '#' + L.n;
+    const cmap = new Map(); comps = [];
+    for (const L of [...order].sort((a, b) => a.s - b.s || a.n - b.n)) if (!cmap.has(ck(L))) { cmap.set(ck(L), comps.length); comps.push({ s: L.s, n: L.n, g: gi(L.s), omega: L.omega, f: freqHz(L.s) * L.n }); }
+    const info = new Float32Array(MAXL * 4 * 4), lutD = new Float32Array(15 * MAXL * 4);
     order.forEach((L, i) => {
       const src = L.src, look = lookOf(src);
-      info.set([src.x, src.y, L.phase, L.omega], i * 4);
-      info.set([L.slot, gi(L.s), src.muted ? 1 : 0, look.len], (MAXL + i) * 4);
+      L.comp = cmap.get(ck(L));
+      info.set([src.x, src.y, L.n * L.voice.phase + L.off, L.omega], i * 4);
+      info.set([L.slot, L.comp, src.muted ? 1 : 0, look.len], (MAXL + i) * 4);
+      info.set([L.voice.phase, L.voice.omega, L.n, 0], (2 * MAXL + i) * 4);
       for (let k = 0; k < 12; k++) lutD.set([...look.rgb[k].map(v => v / 255), 1], (i * 15 + k) * 4);
       for (let k = 0; k < 3; k++) lutD.set([...look.echoRgb[k].map(v => v / 255), 1], (i * 15 + 12 + k) * 4);
     });
-    groups.forEach((a, x) => groups.forEach((b, y) => { cl[y * MAXL + x] = x === y ? 0 : clashOf(a, b); }));
-    gl.bindTexture(gl.TEXTURE_2D, infoTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAXL, 2, gl.RGBA, gl.FLOAT, info);
+    comps.forEach((c, k) => info.set([c.g, c.n, c.omega, 0], (3 * MAXL + k) * 4));
+    // every pair of components from different pitches that is rough enough to count
+    const pairs = new Float32Array(MAXPAIRS * 4); nPairs = 0;
+    for (let a = 0; a < comps.length; a++) for (let b = a + 1; b < comps.length; b++) {
+      const A = comps[a], B = comps[b]; if (A.g === B.g) continue;
+      const v = measure === 'wave' ? (A.n === 1 && B.n === 1 ? clashOf(A.s, B.s) : 0) : roughPair1(A.f, B.f) / dmaxS;
+      if (v < 1e-4 || nPairs >= MAXPAIRS) continue;
+      pairs.set([a, b, v, 0], nPairs * 4); nPairs++;
+    }
+    gl.bindTexture(gl.TEXTURE_2D, infoTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAXL, 4, gl.RGBA, gl.FLOAT, info);
     gl.bindTexture(gl.TEXTURE_2D, lutTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 15, MAXL, gl.RGBA, gl.FLOAT, lutD);
-    gl.bindTexture(gl.TEXTURE_2D, clashTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAXL, MAXL, gl.RED, gl.FLOAT, cl);
-    return groups;
+    gl.bindTexture(gl.TEXTURE_2D, pairsTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAXPAIRS, 1, gl.RGBA, gl.FLOAT, pairs);
   }
   function bindRead(prog) {
     bindTex(prog, 'uS', 0, S0, gl.TEXTURE_2D_ARRAY); bindTex(prog, 'uWall', 1, wallTex); bindTex(prog, 'uInfo', 2, infoTex);
-    bindTex(prog, 'uLut', 3, lutTex); bindTex(prog, 'uClash', 4, clashTex);
+    bindTex(prog, 'uLut', 3, lutTex); bindTex(prog, 'uPairs', 4, pairsTex);
     gl.uniform2i(prog.u.uSize, W, H); gl.uniform1i(prog.u.uNL, order.length); gl.uniform1i(prog.u.uGEN, GEN);
+    gl.uniform1i(prog.u.uNC, comps.length); gl.uniform1i(prog.u.uNG, groups.length); gl.uniform1i(prog.u.uNP, nPairs);
+    gl.uniform1i(prog.u.uRatio, measure === 'wave' ? 1 : 0);
   }
 
-  // ---------- reading the water back: brightness scaling, the probe, the sound and the leaves ----------
-  let samples = null;    // { pts, amp[layerIndex][pt], group[g][pt], groups }
-  function readBack(groups) {
+  // ---------- reading the field back: brightness scaling, the probe, the sound and the drifters ----------
+  let samples = null;    // { pts, amp[layer][pt], comp[component][pt] }
+  function readBack() {
     // the brightness scale, from a coarse grid of the map
-    gl.useProgram(P_METRIC.p); bindRead(P_METRIC); gl.uniform1i(P_METRIC.u.uNG, groups.length); gl.uniform2i(P_METRIC.u.uGrid, MW, MH);
+    gl.useProgram(P_METRIC.p); bindRead(P_METRIC); gl.uniform2i(P_METRIC.u.uGrid, MW, MH);
     target(metricTex); gl.viewport(0, 0, MW, MH); gl.drawArrays(gl.TRIANGLES, 0, 3);
     const m = new Float32Array(MW * MH * 4); gl.readPixels(0, 0, MW, MH, gl.RGBA, gl.FLOAT, m);
     let mV = 0, mS = 0, mR = 0;
     for (let i = 0; i < MW * MH; i++) { mV = Math.max(mV, m[i * 4]); mS = Math.max(mS, m[i * 4 + 1]); mR = Math.max(mR, m[i * 4 + 2]); }
-    // auto gain: rises instantly, falls slowly, never past a floor, so quiet water looks quiet
+    // auto gain: rises instantly, falls slowly, never past a floor, so a quiet field looks quiet
     gWater = Math.max(mV, gWater * 0.985, GAIN_FLOOR); gColour = Math.max(mV, gColour * 0.985, GAIN_FLOOR);
     gS = Math.max(mS, gS * 0.985, GAIN_FLOOR); gR = Math.max(mR, gR * 0.985, GAIN_FLOOR * GAIN_FLOOR);
-    // the cells we need numbers for: the hovered one, then five around each leaf
+    // the cells we need numbers for: the hovered one, then five around each drifter
     const pts = [hover >= 0 ? [hover % W, (hover / W) | 0] : [-1, -1]];
     for (const l of leaves) { const [cx, cy] = leafCell(l), r = LEAF_R; pts.push([cx, cy], [cx + r, cy], [cx - r, cy], [cx, cy + r], [cx, cy - r]); }
-    const np = Math.min(MAXPTS, pts.length), rows = order.length + groups.length;
-    if (!rows) { samples = { pts, amp: [], group: [], groups }; return; }
+    const np = Math.min(MAXPTS, pts.length), rows = order.length + comps.length;
+    if (!rows) { samples = { pts, amp: [], comp: [] }; return; }
     const pd = new Float32Array(MAXPTS * 2); pts.slice(0, np).forEach((q, j) => { pd[j * 2] = q[0]; pd[j * 2 + 1] = q[1]; });
     gl.bindTexture(gl.TEXTURE_2D, ptsTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAXPTS, 1, gl.RG, gl.FLOAT, pd);
-    gl.useProgram(P_SAMPLE.p); bindRead(P_SAMPLE); gl.uniform1i(P_SAMPLE.u.uNG, groups.length); bindTex(P_SAMPLE, 'uPts', 5, ptsTex);
+    gl.useProgram(P_SAMPLE.p); bindRead(P_SAMPLE); bindTex(P_SAMPLE, 'uPts', 5, ptsTex);
     target(sampleTex); gl.viewport(0, 0, np, rows); gl.drawArrays(gl.TRIANGLES, 0, 3);
     const d = new Float32Array(np * rows * 4); gl.readPixels(0, 0, np, rows, gl.RGBA, gl.FLOAT, d);
     const amp = order.map((_, i) => Array.from({ length: np }, (_, j) => d[(i * np + j) * 4]));
-    const group = groups.map((_, g) => Array.from({ length: np }, (_, j) => d[((order.length + g) * np + j) * 4]));
-    samples = { pts, amp, group, groups };
+    const comp = comps.map((_, c) => Array.from({ length: np }, (_, j) => d[((order.length + c) * np + j) * 4]));
+    samples = { pts, amp, comp };
+  }
+  // dissonance at a sampled point, from the components there: the same sum the picture uses
+  function dissonanceAt(j) {
+    const A = comps.map((_, c) => samples.comp[c][j] || 0), W = groups.map(() => 0);
+    comps.forEach((c, k) => { if (measure === 'wave') { if (c.n === 1) W[c.g] = A[k]; } else W[c.g] += A[k] * A[k]; });
+    const Wn = W.map(w => measure === 'wave' ? w : Math.sqrt(w));
+    let P = 0, R = 0, E = 0; Wn.forEach((a, x) => Wn.forEach((b, y) => { if (y > x) P += a * b; }));
+    A.forEach(a => { E += a * a; });
+    for (let a = 0; a < comps.length; a++) for (let b = a + 1; b < comps.length; b++) {
+      const ca = comps[a], cb = comps[b]; if (ca.g === cb.g) continue;
+      const v = measure === 'wave' ? (ca.n === 1 && cb.n === 1 ? clashOf(ca.s, cb.s) : 0) : roughPair1(ca.f, cb.f) / dmaxS;
+      R += A[a] * A[b] * v;
+    }
+    return { d: P > 1e-12 ? R / P : 0, E, W: Wn, A };
   }
 
-  // ---------- leaves ----------
-  // How well the water at a cell suits a leaf's chord, from everyone's song but its own: the leaf's own notes there
-  // count for it, every other note counts against it by how hard it clashes with the chord.
+  // ---------- drifters ----------
+  // How well the field at a point suits a drifter's chord, from everyone's song but its own. Each other pitch arriving
+  // there is weighed by what actually arrives of it: if it is one of the chord's notes it counts for the drifter;
+  // otherwise it counts against, by how rough what arrives of it is against the chord as the drifter sings it.
   function suitability(l, j) {
     const [x, y] = samples.pts[j];
     if (x < 0 || y < 0 || x >= W || y >= H || wall[y * W + x]) return null;
-    const amp = new Map();
-    order.forEach((L, i) => { if (L.src !== l) { const a = samples.amp[i][j]; amp.set(L.s, (amp.get(L.s) || 0) + a * a); } });
+    const arrive = new Map();   // pitch -> harmonic n -> strength², from every layer that isn't this drifter's
+    order.forEach((L, i) => {
+      if (L.src === l) return;
+      if (!arrive.has(L.s)) arrive.set(L.s, new Map());
+      const h = arrive.get(L.s), a = samples.amp[i][j]; h.set(L.n, (h.get(L.n) || 0) + a * a);
+    });
+    const mine = l.chord.map(c => partials(shapeOf(l), c));
     let q = 0;
-    for (const [s, a2] of amp) {
-      const A = Math.sqrt(a2);
-      if (l.chord.includes(s)) q += A;
-      else { let d = 0; for (const c of l.chord) d += clashOf(s, c); q -= A * d / l.chord.length; }
+    for (const [s, h] of arrive) {
+      const P = [...h].map(([n, a2]) => ({ n, a: Math.sqrt(a2), s: s + 12 * Math.log2(n) })).filter(p => p.a > 1e-9);
+      if (!P.length) continue;
+      const Wg = measure === 'wave' ? (P.find(p => p.n === 1) || { a: 0 }).a : l2(P);
+      if (l.chord.includes(s)) { q += Wg; continue; }
+      let d = 0;
+      l.chord.forEach((c, k) => { d += measure === 'wave' ? clashOf(s, c) : Math.min(1, specRough(P, mine[k]) / dmaxS); });
+      q -= Wg * d / l.chord.length;
     }
     return q;
   }
   const cellOf = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? -1 : y * W + x;
-  // The current runs uphill on suitability, faster where the slope is steeper, never faster than the waves.
-  // The leaf moves at half of it for each step that ran this frame. Walls are solid: it slides along them.
+  // The drift runs uphill on suitability, faster where the slope is steeper, never faster than the waves.
+  // The drifter moves at half of it for each step that ran this frame. Walls are solid: it slides along them.
   function moveLeaves(steps) {
     if (!samples || !steps) return;
     leaves.forEach((l, k) => {
@@ -867,7 +998,7 @@ details[open] { display: grid; gap: 8px; }
       const g = Math.hypot(gx, gy); if (g < 1e-12) return;
       const v = 0.5 * Math.min(WAVE_C, kappa * g) * steps;
       const free = (x, y) => { const i = cellOf(Math.round(x), Math.round(y)); return i >= 0 && !wall[i]; };
-      // move in single-cell-or-less hops so a fast leaf never jumps a wall
+      // move in single-cell-or-less hops so a fast drifter never jumps a wall
       const hops = Math.max(1, Math.ceil(v)), dx = v * gx / g / hops, dy = v * gy / g / hops;
       for (let h = 0; h < hops; h++) {
         if (free(l.x + dx, l.y + dy)) { l.x += dx; l.y += dy; }
@@ -879,7 +1010,7 @@ details[open] { display: grid; gap: 8px; }
   }
 
   // ---------- drawing ----------
-  // walls are painted once into their own picture whenever they change, then laid over the water
+  // walls are painted once into their own picture whenever they change, then laid over the field
   const wallCv = document.createElement('canvas'); wallCv.width = W; wallCv.height = H;
   const wctx = wallCv.getContext('2d');
   function paintWalls() {
@@ -888,10 +1019,10 @@ details[open] { display: grid; gap: 8px; }
     for (let i = 0; i < N; i++) if (wall[i]) { d[i * 4] = c[0]; d[i * 4 + 1] = c[1]; d[i * 4 + 2] = c[2]; d[i * 4 + 3] = 255; }
     wctx.putImageData(im, 0, 0);
   }
-  function resizeCanvases() { if (GPU_OK) allocField(); wallCv.width = W; wallCv.height = H; size(); }
+  function resizeCanvases() { if (GPU_OK) allocField(layersNeeded()); wallCv.width = W; wallCv.height = H; size(); }
 
-  // Switch grid fineness, keeping the map: walls are resampled cell for cell, posts and leaves keep their places.
-  // The water restarts, since its waves were laid out for the old grid.
+  // Switch grid fineness, keeping the map: walls are resampled cell for cell, sources and drifters keep their places.
+  // The field restarts, since its waves were laid out for the old grid.
   function setGrid(k) {
     if (k === gridK) return;
     const f = k / gridK, oldW = W, oldWall = wall;
@@ -930,17 +1061,17 @@ details[open] { display: grid; gap: 8px; }
   try { colourWaves = localStorage.getItem('fds-colour-waves') === '1'; } catch (e) {}
   const VIEW_ID = { water: 0, harm: 1, turb: 2, colour: 3 };
 
-  function draw(groups) {
+  function draw() {
     if (GPU_OK) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H);
       gl.useProgram(P_VIEW.p); bindRead(P_VIEW);
       const u = P_VIEW.u, c3 = (name, c) => gl.uniform3f(u[name], c[0] / 255, c[1] / 255, c[2] / 255);
-      gl.uniform1i(u.uNG, groups.length); gl.uniform1i(u.uView, VIEW_ID[view]); gl.uniform1i(u.uCW, colourWaves ? 1 : 0);
+      gl.uniform1i(u.uView, VIEW_ID[view]); gl.uniform1i(u.uCW, colourWaves ? 1 : 0);
       gl.uniform1f(u.uGW, gWater); gl.uniform1f(u.uGS, gS); gl.uniform1f(u.uGR, gR); gl.uniform1f(u.uGC, gColour);
       c3('uDeep', COL.deep); c3('uCrest', COL.crest); c3('uCalm', COL.calm); c3('uTurb', COL.turb); c3('uBg', COL.bg);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
-    // the overlay: walls, the straight run being drawn, posts and leaves
+    // the overlay: walls, the straight run being drawn, sources and drifters
     ctx.clearRect(0, 0, cell * W, cell * H);
     ctx.imageSmoothingEnabled = false; ctx.drawImage(wallCv, 0, 0, cell * W, cell * H); ctx.imageSmoothingEnabled = true;
     if (anchor && lockedEnd) {   // the straight run you're holding with Shift, not laid yet
@@ -987,59 +1118,66 @@ details[open] { display: grid; gap: 8px; }
   function drawProbe() {
     if (hover < 0 || !samples) return;
     if (wall[hover]) { probe$.innerHTML = '<span class="empty">Wall.</span>'; return; }
-    const groups = samples.groups, amps = groups.map((s, g) => [s, samples.group[g] ? samples.group[g][0] : 0]);
-    const top = Math.max(1e-9, ...amps.map(a => a[1]));
-    let E = 0, R = 0, P = 0;
-    amps.forEach(([s, a], x) => { E += a * a; amps.forEach(([s2, b], y) => { if (y > x) { const w = a * b; P += w; R += w * clashOf(s, s2); } }); });
-    const r = P > 1e-12 ? R / P : 0;
-    const verdict = E < 1e-8 ? 'silent' : r < 0.5 ? 'consonant' : r < 0.7 ? 'tense' : 'dissonant';
+    const { d, E, W: Wg, A } = dissonanceAt(0);
+    const top = Math.max(1e-9, ...Wg);
+    const verdict = E < 1e-8 ? 'silent' : d < 0.5 ? 'consonant' : d < 0.7 ? 'tense' : 'dissonant';
     const x = hover % W, y = (hover / W) | 0;
+    // each pitch: its strength, and the harmonics of it arriving here, scaled to its strongest
+    const spectrum = g => {
+      const hs = comps.map((c, k) => [c, A[k]]).filter(([c]) => c.g === g), mx = Math.max(1e-9, ...hs.map(h => h[1]));
+      return '<span class="spec">' + Array.from({ length: MAX_HARM }, (_, n) => {
+        const h = hs.find(([c]) => c.n === n + 1);
+        return `<i style="height:${h ? Math.max(1, Math.round(12 * h[1] / mx)) : 0}px"></i>`;
+      }).join('') + '</span>';
+    };
     probe$.innerHTML =
       `<div>cell ${x}, ${y}</div>` +
-      amps.map(([s, a]) => `<div class="bar"><span>${label(s)}</span><span><i style="width:${(100 * a / top).toFixed(0)}%"></i></span><span>${a.toFixed(3)}</span></div>`).join('') +
-      `<div>dissonance ${r.toFixed(2)} · <span class="verdict">${verdict}</span></div>`;
+      groups.map((s, g) => `<div class="bar"><span>${label(s)}</span><span><i style="width:${(100 * Wg[g] / top).toFixed(0)}%"></i></span><span>${Wg[g].toFixed(3)}</span>${spectrum(g)}</div>`).join('') +
+      `<div>dissonance ${d.toFixed(2)} · <span class="verdict">${verdict}</span></div>`;
   }
 
-  // ---------- sound: hear the water under the cursor ----------
-  // Every source plays its note at the strength its own waves have in the hovered cell, through its own
-  // little synth voice: oscillator, filter, volume, and a send into a shared reverb.
+  // ---------- sound: hear the field under the cursor ----------
+  // Every harmonic arriving at the hovered cell plays as a pure tone at the strength it has there, so you hear the
+  // waveform as it arrives: bright in the open, dulled behind a wall. Each source's filter and reverb send shape it.
   let actx = null, master = null, verb = null, verbIn = null, wave = null, soundOn = false;
   let masterVol = 0.8, room = 2.2;
-  const voices = new Map();
+  const synth = new Map();
   function makeRoom(seconds) {
     // a reverb tail made from decaying noise, a little different on each side
     const len = Math.max(1, Math.floor(actx.sampleRate * seconds)), buf = actx.createBuffer(2, len, actx.sampleRate);
     for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
     verb.buffer = buf;
   }
-  function voice(L) {
-    if (voices.has(L.key)) return voices.get(L.key);
+  function voiceFor(L) {
+    if (synth.has(L.key)) return synth.get(L.key);
     const o = actx.createOscillator(), f = actx.createBiquadFilter(), g = actx.createGain(), send = actx.createGain();
-    o.frequency.value = freqHz(L.s); g.gain.value = 0;
+    o.type = 'sine'; o.frequency.value = freqHz(L.s) * L.n; g.gain.value = 0;
     o.connect(f).connect(g); g.connect(master); g.connect(send).connect(verbIn); o.start();
-    const v = { o, f, g, send, shape: null }; voices.set(L.key, v); return v;
+    const v = { o, f, g, send }; synth.set(L.key, v); return v;
   }
   function applySettings(v, snd, now) {
-    if (v.shape !== snd.shape) { if (snd.shape === 'overtones') v.o.setPeriodicWave(wave); else v.o.type = snd.shape; v.shape = snd.shape; }
     if (snd.filter === 'none') { v.f.type = 'allpass'; v.f.frequency.setTargetAtTime(20000, now, 0.03); v.f.Q.setTargetAtTime(0.0001, now, 0.03); }
     else { v.f.type = snd.filter; v.f.frequency.setTargetAtTime(snd.cutoff, now, 0.03); v.f.Q.setTargetAtTime(snd.q, now, 0.03); }
     v.send.gain.setTargetAtTime(snd.verb, now, 0.05);
   }
   function updateSound() {
     if (!actx) return;
-    const now = actx.currentTime, here = soundOn && hover >= 0 && !wall[hover];
-    const all = [...layers.values()], idx = new Map(order.map((L, i) => [L, i]));
-    // Loudness follows the same square-root curve as the picture's brightness. Measured straight against the
-    // loudest cell on the map (right on top of a post) almost everywhere else came out near silent.
-    const share = 0.5 / Math.sqrt(Math.max(1, all.length));
-    for (const L of all) {
-      const v = voice(L), snd = L.src.snd;
-      applySettings(v, snd, now);
-      v.o.frequency.setTargetAtTime(freqHz(L.s), now, 0.02);
-      const A = here && !L.src.muted && samples && idx.has(L) && samples.amp[idx.get(L)] ? samples.amp[idx.get(L)][0] : 0;
-      v.g.gain.setTargetAtTime(Math.min(1, Math.sqrt(A / gS)) * share, now, 0.06);   // strength is already in A
+    const now = actx.currentTime, here = soundOn && hover >= 0 && !wall[hover] && samples;
+    const idx = new Map(order.map((L, i) => [L, i]));
+    const A = L => here && !L.src.muted && idx.has(L) && samples.amp[idx.get(L)] ? samples.amp[idx.get(L)][0] : 0;
+    // Loudness follows the same square-root curve as the picture's brightness, per sung note, and each harmonic keeps
+    // its share of that note, so the timbre you hear is the timbre that arrived.
+    const byVoice = new Map();
+    for (const L of layers.values()) byVoice.set(L.voice, (byVoice.get(L.voice) || 0) + A(L) * A(L));
+    const share = 0.5 / Math.sqrt(Math.max(1, byVoice.size));
+    for (const L of layers.values()) {
+      const v = voiceFor(L), Wv = Math.sqrt(byVoice.get(L.voice) || 0);
+      applySettings(v, L.src.snd, now);
+      v.o.frequency.setTargetAtTime(freqHz(L.s) * L.n, now, 0.02);
+      const g = Wv > 1e-9 ? Math.min(1, Math.sqrt(Wv / gS)) * share * A(L) / Wv : 0;
+      v.g.gain.setTargetAtTime(g, now, 0.06);
     }
-    for (const [k, v] of voices) if (!layers.has(k)) { v.g.gain.setTargetAtTime(0, now, 0.03); v.o.stop(now + 0.2); voices.delete(k); }
+    for (const [k, v] of synth) if (!layers.has(k)) { v.g.gain.setTargetAtTime(0, now, 0.03); v.o.stop(now + 0.2); synth.delete(k); }
     master.gain.setTargetAtTime(masterVol, now, 0.05);
   }
   const sound$ = document.getElementById('sound');
@@ -1126,7 +1264,7 @@ details[open] { display: grid; gap: 8px; }
     for (const a of ss) {
       h += `<tr><th>${label(a)}</th>`;
       for (const b of ss) {
-        const v = clashOf(a, b), tip = measure === 'wave' ? ` title="${ratioAt(a, b)}"` : '';
+        const v = pitchClash(a, b), tip = measure === 'wave' ? ` title="${ratioAt(a, b)}"` : '';
         h += a === b ? '<td style="color:var(--muted)">·</td>' : `<td${tip} style="color:${rgb(mix(COL.calm, COL.turb, Math.min(1, v)))}">${v.toFixed(2)}</td>`;
       }
       h += '</tr>';
@@ -1137,7 +1275,7 @@ details[open] { display: grid; gap: 8px; }
 
   // ---------- which clash measure ----------
   const MX_HINT = {
-    ear: '0 is perfect consonance, 1 the harshest dissonance in the range. Roughness: how much the pitches\' overtones beat against each other in human hearing (Plomp–Levelt, Sethares), which also counts low, crowded pitches as rough.',
+    ear: '0 is perfect consonance, 1 the harshest dissonance in the range. Roughness: how much the pitches\' harmonics beat against each other in human hearing (Plomp–Levelt, Sethares), using each source\'s own waveform. Shown at the sources; the field measures it from the harmonics that actually arrive.',
     wave: '0 is perfect consonance, 1 the harshest dissonance in the range. Ratio: how simple a whole-number ratio the two pitches form (hover a number to see it), plus a cost for equal-tempered drift. The same in every octave.'
   };
   function setMeasure(m) {
@@ -1163,10 +1301,7 @@ details[open] { display: grid; gap: 8px; }
     s = Math.max(0, Math.min(maxPitch(), s));
     const old = p.s; if (old === s) return;
     p.s = s;
-    const L = layers.get('p' + p.id);
-    if (L) {
-      L.s = s; L.omega = 2 * Math.PI * (WAVE_C / lambda(s));
-    }
+    syncLayers();   // its harmonics follow; a lower pitch may fit more of them under the grid's limit
     renderPosts(); renderMatrix(); renderNotes();
   }
   function renderPitch() {
@@ -1190,6 +1325,7 @@ details[open] { display: grid; gap: 8px; }
     $('tuneh').textContent = 'Tune ' + (sel.chord ? 'drifter ' + sel.chord.map(label).join(' ') : 'source ' + label(sel.s));
     renderLook(); renderPitch();
     $('s-shape').value = s.shape; $('s-filter').value = s.filter;
+    { const n = sel.chord ? layersFor(s.shape, sel.chord) : partials(s.shape, sel.s).length; $('s-shapev').textContent = n === 1 ? '1 wave' : n + ' waves'; }
     $('s-cut').value = cutPos(s.cutoff); $('s-q').value = qPos(s.q);
     $('s-vol').value = s.vol > 0 ? Math.max(-40, Math.round(20 * Math.log10(s.vol))) : -40; $('s-verb').value = s.verb * 100;
     const off = s.filter === 'none'; $('s-cut').disabled = off; $('s-q').disabled = off;
@@ -1199,14 +1335,20 @@ details[open] { display: grid; gap: 8px; }
     $('s-verbv').textContent = Math.round(s.verb * 100) + '%';
   }
   const tuneInput = (id, fn) => $(id).addEventListener('input', e => { if (!sel) return; fn(sel.snd, e.target.value); renderTune(); });
-  tuneInput('s-shape', (s, v) => { s.shape = v; });
+  // the waveform is physical: changing it changes which harmonics the source sends into the field
+  $('s-shape').addEventListener('input', e => {
+    if (!sel) return;
+    const was = sel.snd.shape; sel.snd.shape = e.target.value;
+    if (layersNeeded() > MAXL) { sel.snd.shape = was; flashFull(); }
+    changed(); renderTune();
+  });
   tuneInput('s-filter', (s, v) => { s.filter = v; });
   tuneInput('s-cut', (s, v) => { s.cutoff = cutHz(+v); });
   tuneInput('s-q', (s, v) => { s.q = qOf(+v); });
   tuneInput('s-vol', (s, v) => { s.vol = +v <= -40 ? 0 : Math.pow(10, +v / 20); });
   tuneInput('s-verb', (s, v) => { s.verb = +v / 100; });
   // copying a sound leaves each source's strength and colours alone
-  $('s-all').onclick = () => { if (!sel) return; for (const o of [...posts, ...leaves]) if (o !== sel) { const look = o.snd.look, vol = o.snd.vol; o.snd = { ...sel.snd, look, vol }; } };
+  $('s-all').onclick = () => { if (!sel) return; for (const o of [...posts, ...leaves]) if (o !== sel) { const look = o.snd.look, vol = o.snd.vol, shape = o.snd.shape; o.snd = { ...sel.snd, look, vol, shape }; } };
 
   // ---------- wave colours for the selected source ----------
   let slotSel = 0;
@@ -1251,7 +1393,7 @@ details[open] { display: grid; gap: 8px; }
   // and everything after. Switching restarts the water, since the generations have to start level.
   function setEchoes(on) {
     echoes = on; GEN = on ? GENS_ECHO : 1; $('ce').setAttribute('aria-pressed', on ? 'true' : 'false');
-    if (GPU_OK) allocField();
+    if (GPU_OK) allocField(Math.max(1, ...[...layers.values()].map(L => L.slot + 1)));
     resetWaves();
     try { localStorage.setItem('fds-echoes', on ? '1' : '0'); } catch (e) {}
   }
@@ -1354,7 +1496,7 @@ details[open] { display: grid; gap: 8px; }
     if (tool === 'post' || tool === 'leaf') {
       if (!first || wall[c[1] * W + c[0]]) return;
       if (tool === 'post' && (octave - 2) * 12 + note > maxPitch()) return;
-      if (layersNeeded() + (tool === 'post' ? 1 : chord.size) > MAXL) { flashFull(); return; }
+      if (layersNeeded() + layersFor(DEF_SND().shape, tool === 'post' ? [(octave - 2) * 12 + note] : [...chord]) > MAXL) { flashFull(); return; }
       const made = tool === 'post'
         ? { id: nextId++, x: c[0], y: c[1], s: (octave - 2) * 12 + note, muted: false, t0: t, snd: DEF_SND() }
         : { id: nextId++, x: c[0], y: c[1], chord: [...chord].filter(n => n <= maxPitch()).sort((a, b) => a - b), muted: false, t0: t, trail: [], snd: DEF_SND() };
@@ -1372,10 +1514,10 @@ details[open] { display: grid; gap: 8px; }
     }
     if (wallsChanged) rebuild();
   }
-  // the water has room for 16 voices: each post is one, each note of a leaf's chord is one
+  // the field has room for 64 waves: each harmonic of each sung note is one
   function flashFull() {
     const h = $('notehint'), was = h.textContent;
-    h.textContent = 'The field is full: 16 voices at most (a source is one, each note of a drifter is one). Remove something first.';
+    h.textContent = 'The field is full: 64 waves at most (each harmonic of each note is one). Remove something or use a simpler waveform.';
     h.style.color = 'var(--turb)';
     setTimeout(() => { h.style.color = ''; if (h.textContent.startsWith('The field is full')) h.textContent = was; }, 3500);
   }
@@ -1483,8 +1625,8 @@ details[open] { display: grid; gap: 8px; }
       while (pending >= 1 && n < 40 && performance.now() - t0 < 30) { step(); pending -= 1; n++; }
       if (pending >= 1) pending = 0;   // the machine couldn't keep up this frame: drop the backlog rather than spiral
     }
-    if (GPU_OK) { const groups = uploadInfo(); readBack(groups); moveLeaves(n); draw(groups); }
-    else draw([]);
+    if (GPU_OK) { uploadInfo(); readBack(); moveLeaves(n); }
+    draw();
     drawProbe(); updateSound();
     document.getElementById('clock').textContent = `t = ${t}`;
     requestAnimationFrame(frame);
