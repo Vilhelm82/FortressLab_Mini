@@ -115,7 +115,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
         <div class="row">
           <label for="oct">Octave</label>
           <select id="oct"><option value="4" selected>4</option><option value="5">5</option></select>
-          <span class="hint">Pick the Post tool, then click the map.</span>
+          <span class="hint">Pick the Post tool, then click the map. Hold Shift while drawing walls to keep them straight.</span>
         </div>
       </div>
 
@@ -330,6 +330,12 @@ table.mx th { color: var(--muted); font-weight: 500; }
     ctx.drawImage(off, 0, 0, w, h);
     ctx.fillStyle = `rgb(${COL.stone})`;
     for (let i = 0; i < N; i++) if (wall[i]) ctx.fillRect((i % W) * cell, ((i / W) | 0) * cell, cell + 0.5, cell + 0.5);
+    if (anchor && lockedEnd) {   // the straight run you're holding with Shift, not laid yet
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = tool === 'erase' ? `rgb(${COL.turb})` : `rgb(${COL.stone})`;
+      for (const [x, y] of line(anchor, lockedEnd)) ctx.fillRect((x - 1) * cell, (y - 1) * cell, cell * 2, cell * 2);
+      ctx.globalAlpha = 1;
+    }
     for (const p of posts) {
       const cx = (p.x + 0.5) * cell, cy = (p.y + 0.5) * cell;
       ctx.beginPath(); ctx.arc(cx, cy, Math.max(4, cell * 1.1), 0, Math.PI * 2);
@@ -435,16 +441,11 @@ table.mx th { color: var(--muted); font-weight: 500; }
     const x = Math.floor((ev.clientX - r.left) / (r.width / W)), y = Math.floor((ev.clientY - r.top) / (r.height / H));
     return (x >= 0 && y >= 0 && x < W && y < H) ? [x, y] : null;
   }
-  function apply(ev, first) {
-    const c = cellAt(ev); if (!c) return;
-    const [x, y] = c, i = y * W + x;
-    if (tool === 'post') {
-      if (!first || wall[i]) return;
-      posts.push({ x, y, s: (octave - 4) * 12 + note, muted: false }); syncLayers(); renderPosts(); renderMatrix(); return;
-    }
+  // one 2x2 brush dab, so walls are thick enough to read; returns whether walls changed
+  function dab(x, y) {
     let changed = false;
-    for (let dy = -1; dy <= 0; dy++) for (let dx = -1; dx <= 0; dx++) {   // a 2x2 brush, so walls are thick enough to read
-      const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0) continue;
+    for (let dy = -1; dy <= 0; dy++) for (let dx = -1; dx <= 0; dx++) {
+      const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
       const j = yy * W + xx;
       if (tool === 'wall' && !wall[j] && !posts.some(p => p.x === xx && p.y === yy)) { wall[j] = 1; changed = true; }
       if (tool === 'erase') {
@@ -453,11 +454,52 @@ table.mx th { color: var(--muted); font-weight: 500; }
         if (posts.length !== before) { syncLayers(); renderPosts(); renderMatrix(); }
       }
     }
+    return changed;
+  }
+  // every cell on the line between two cells, so a fast drag leaves no gaps
+  function line(a, b) {
+    const n = Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]), 1), out = [];
+    for (let k = 0; k <= n; k++) out.push([Math.round(a[0] + (b[0] - a[0]) * k / n), Math.round(a[1] + (b[1] - a[1]) * k / n)]);
+    return out;
+  }
+  // holding Shift locks the stroke to straight across, straight down, or a 45 degree diagonal from where it started
+  function snap(from, to) {
+    const dx = to[0] - from[0], dy = to[1] - from[1], ax = Math.abs(dx), ay = Math.abs(dy);
+    if (ax > 2 * ay) return [to[0], from[1]];
+    if (ay > 2 * ax) return [from[0], to[1]];
+    const d = Math.max(ax, ay);
+    return [from[0] + Math.sign(dx) * d, from[1] + Math.sign(dy) * d];
+  }
+  let anchor = null, last = null, lockedEnd = null;
+  function stroke(ev, first) {
+    const c = cellAt(ev); if (!c) return;
+    if (tool === 'post') {
+      if (!first || wall[c[1] * W + c[0]]) return;
+      posts.push({ x: c[0], y: c[1], s: (octave - 4) * 12 + note, muted: false }); syncLayers(); renderPosts(); renderMatrix(); return;
+    }
+    let changed = false;
+    if (first) { anchor = last = c; changed = dab(c[0], c[1]); }
+    else if (ev.shiftKey) {
+      lockedEnd = snap(anchor, c);   // shown as a preview, laid down on release
+    } else {
+      if (lockedEnd) { changed = commitStraight(); last = anchor; }   // let go of Shift mid-stroke: lay it and carry on freehand
+      for (const [x, y] of line(last, c)) changed = dab(x, y) || changed;
+      last = c;
+    }
     if (changed) rebuild();
   }
-  view$.addEventListener('pointerdown', ev => { painting = true; view$.setPointerCapture(ev.pointerId); apply(ev, true); });
-  view$.addEventListener('pointermove', ev => { const c = cellAt(ev); hover = c ? c[1] * W + c[0] : -1; if (painting) apply(ev, false); });
-  view$.addEventListener('pointerup', () => { painting = false; });
+  function commitStraight() {
+    let changed = false;
+    for (const [x, y] of line(anchor, lockedEnd)) changed = dab(x, y) || changed;
+    anchor = lockedEnd; lockedEnd = null;
+    return changed;
+  }
+  view$.addEventListener('pointerdown', ev => { painting = true; view$.setPointerCapture(ev.pointerId); stroke(ev, true); });
+  view$.addEventListener('pointermove', ev => { const c = cellAt(ev); hover = c ? c[1] * W + c[0] : -1; if (painting) stroke(ev, false); });
+  view$.addEventListener('pointerup', () => {
+    if (lockedEnd && commitStraight()) rebuild();
+    painting = false; anchor = last = lockedEnd = null;
+  });
   view$.addEventListener('pointerleave', () => { hover = -1; probe$.innerHTML = '<span class="empty">Hover the map to read a cell.</span>'; });
 
   // ---------- presets ----------
