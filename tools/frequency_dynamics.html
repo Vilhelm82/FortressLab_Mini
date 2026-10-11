@@ -139,7 +139,7 @@ details[open] { display: grid; gap: 8px; }
 <div class="wrap">
   <header>
     <h1>Frequency Dynamics Simulator</h1>
-    <p>Posts sing a note, leaves sing a chord and drift with the water. Agreeing notes build calm water; clashing notes churn it.</p>
+    <p>Sources emit a pitch into a live wave field; drifters carry a chord and move toward the regions most consonant with it. Consonant pitches reinforce into stable patterns, dissonant ones break into roughness.</p>
   </header>
 
   <div class="main">
@@ -147,32 +147,32 @@ details[open] { display: grid; gap: 8px; }
       <div class="toolbar">
         <div class="seg" role="group" aria-label="Tool">
           <button id="t-wall" aria-pressed="true">Wall</button>
-          <button id="t-post" aria-pressed="false">Post</button>
-          <button id="t-leaf" aria-pressed="false">Leaf</button>
+          <button id="t-post" aria-pressed="false">Source</button>
+          <button id="t-leaf" aria-pressed="false">Drifter</button>
           <button id="t-erase" aria-pressed="false">Erase</button>
         </div>
         <div class="seg" role="group" aria-label="View">
-          <button id="v-water" aria-pressed="false">Water</button>
-          <button id="v-harm" aria-pressed="true">Harmony</button>
-          <button id="v-turb" aria-pressed="false">Turbulence</button>
-          <button id="v-colour" aria-pressed="false">Wave colours</button>
+          <button id="v-water" aria-pressed="false">Displacement</button>
+          <button id="v-harm" aria-pressed="true">Consonance</button>
+          <button id="v-turb" aria-pressed="false">Dissonance</button>
+          <button id="v-colour" aria-pressed="false">Source colour</button>
         </div>
         <span class="spacer"></span>
         <div class="seg" role="group" aria-label="Toggles">
           <button id="cw" aria-pressed="false">Colour waves</button>
-          <button id="ce" aria-pressed="false" title="Colour the waves by how many times they have bounced off a wall: first, second, third and after, in each source's echo colours">Colour echoes</button>
+          <button id="ce" aria-pressed="false" title="Colour the field by reflection order: direct, 1st, 2nd and 3rd+ order reflections, in each source's reflection colours">Reflections</button>
           <button id="sound" aria-pressed="false">Sound on</button>
         </div>
         <div class="seg" role="group" aria-label="Playback">
           <button id="run">Pause</button>
-          <button id="reset">Reset waves</button>
+          <button id="reset">Reset field</button>
         </div>
       </div>
-      <div class="canvas-box"><canvas id="gl" aria-hidden="true"></canvas><canvas id="view" aria-label="Ripple tank map"></canvas></div>
+      <div class="canvas-box"><canvas id="gl" aria-hidden="true"></canvas><canvas id="view" aria-label="Wave field"></canvas></div>
       <div class="legend">
-        <span id="leg"><span class="swatch sw-harm"></span>calm and constructive to turbulent, brightness is strength</span>
-        <span><span class="swatch sw-wall"></span>hard wall</span>
-        <span><span class="swatch sw-leaf"></span>leaf and trail</span>
+        <span id="leg"><span class="swatch sw-harm"></span>consonant to dissonant, brightness is intensity</span>
+        <span><span class="swatch sw-wall"></span>reflective wall</span>
+        <span><span class="swatch sw-leaf"></span>drifter and trail</span>
         <span class="spacer"></span>
         <span id="clock" class="clock">t = 0</span>
       </div>
@@ -184,10 +184,10 @@ details[open] { display: grid; gap: 8px; }
         </div>
         <div class="card">
           <div class="cardhead">
-            <h2>Clash between notes in play</h2>
-            <div class="seg small" role="group" aria-label="How clash is measured">
-              <button id="m-ear" aria-pressed="true">Ear</button>
-              <button id="m-wave" aria-pressed="false">Waves</button>
+            <h2>Dissonance between pitches in play</h2>
+            <div class="seg small" role="group" aria-label="Dissonance model">
+              <button id="m-ear" aria-pressed="true">Roughness</button>
+              <button id="m-wave" aria-pressed="false">Ratio</button>
             </div>
           </div>
           <div class="mx-box" id="mx"></div>
@@ -199,18 +199,18 @@ details[open] { display: grid; gap: 8px; }
     <aside>
       <div class="card">
         <div class="cardhead">
-          <h2 id="noteh">Note for the next post</h2>
+          <h2 id="noteh">Pitch for the next source</h2>
           <label class="inline" for="oct">Octave
             <select id="oct"><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option></select></label>
         </div>
         <div class="notes" id="notes"></div>
         <div class="chordv" id="chordv" hidden></div>
         <div class="ivkey" id="ivkey">
-          <span id="ivwho" class="ivwho">Hover a post to colour the notes against it.</span>
+          <span id="ivwho" class="ivwho">Hover a source to class every note against it.</span>
           <span><i style="background:var(--perfect)"></i>perfect</span><span><i style="background:var(--imperfect)"></i>imperfect</span>
-          <span><i style="background:var(--mild)"></i>mild clash</span><span><i style="background:var(--sharp)"></i>sharp clash</span>
+          <span><i style="background:var(--mild)"></i>mild dissonance</span><span><i style="background:var(--sharp)"></i>sharp dissonance</span>
         </div>
-        <p class="hint" id="notehint">Pick a note, then click the map to place a post. Hold Shift while drawing walls to keep them straight.</p>
+        <p class="hint" id="notehint">Pick a note, then click the field to place a source. Hold Shift while drawing walls to keep them straight.</p>
       </div>
 
       <div class="card">
@@ -223,8 +223,8 @@ details[open] { display: grid; gap: 8px; }
         <p class="hint" id="tuneempty">Press Tune on anything in the list to shape its sound and wave colours.</p>
         <div id="tunebody" hidden>
           <div class="tune">
-            <h3>In the water</h3>
-            <div class="ctl"><label for="s-vol">Strength</label><input id="s-vol" type="range" min="-40" max="12" step="1" value="0"><span class="val" id="s-volv"></span></div>
+            <h3>In the field</h3>
+            <div class="ctl"><label for="s-vol">Gain</label><input id="s-vol" type="range" min="-40" max="12" step="1" value="0"><span class="val" id="s-volv"></span></div>
             <div id="pitchbox" class="tune">
               <h3 class="h3row">Pitch <span class="val" id="s-pitchv"></span></h3>
               <div class="ctl wide"><label for="s-pitch" id="s-pitchl">Octave 4</label><input id="s-pitch" type="range" min="0" max="1200" step="1" value="0"></div>
@@ -244,13 +244,13 @@ details[open] { display: grid; gap: 8px; }
             <div class="ctl"><label for="c-pick">Colour</label>
               <div class="pickrow"><input id="c-pick" type="color" value="#5fd4c6"><select id="c-len" aria-label="Cycle length"></select></div><span></span></div>
             <div class="slots" id="c-slots" aria-label="Colour of each wave in the cycle"></div>
-            <div class="ctl"><label for="c-echo1">Echoes</label><div class="pickrow"><input id="c-echo1" type="color" value="#f4f1e8" title="First bounce"><input id="c-echo2" type="color" value="#e8b04a" title="Second bounce"><input id="c-echo3" type="color" value="#9a6ae0" title="Third bounce and after"><span class="hint">1st, 2nd, 3rd+ bounce</span></div><span></span></div>
+            <div class="ctl"><label for="c-echo1">Reflections</label><div class="pickrow"><input id="c-echo1" type="color" value="#f4f1e8" title="1st order reflections"><input id="c-echo2" type="color" value="#e8b04a" title="2nd order reflections"><input id="c-echo3" type="color" value="#9a6ae0" title="3rd order and beyond"><span class="hint">1st, 2nd, 3rd+ order</span></div><span></span></div>
             <div class="btnrow">
               <button id="c-all">Paint all</button>
               <button id="c-3">Every 3rd</button>
               <button id="c-5">Every 5th</button>
             </div>
-            <button id="c-note" class="quiet">Copy colours to everything on this note</button>
+            <button id="c-note" class="quiet">Copy colours to every source on this pitch</button>
           </div>
         </div>
       </div>
@@ -261,34 +261,34 @@ details[open] { display: grid; gap: 8px; }
           <div class="ctl"><label for="preset">Map</label>
             <select id="preset">
               <option value="courtyard">Courtyard with a gate</option>
-              <option value="fifth">Two posts, a fifth apart</option>
-              <option value="semitone">Two posts, a semitone apart</option>
+              <option value="fifth">Two sources, a fifth apart</option>
+              <option value="semitone">Two sources, a semitone apart</option>
               <option value="corridor">A corridor</option>
               <option value="blank">Empty field</option>
             </select>
             <button id="load">Load</button></div>
-          <div class="ctl"><label for="grid">Grid</label>
+          <div class="ctl"><label for="grid">Resolution</label>
             <select id="grid"><option value="1">1x · 160 × 100</option><option value="2">2x · 320 × 200, 4× the work</option><option value="3">3x · 480 × 300, 9× the work</option></select><span class="val" id="gridv"></span></div>
-          <div class="ctl"><label for="edge">Edge</label>
-            <select id="edge"><option value="open" selected>Open, waves leave</option><option value="hard">Hard, waves bounce</option></select><span></span></div>
+          <div class="ctl"><label for="edge">Boundary</label>
+            <select id="edge"><option value="open" selected>Absorbing</option><option value="hard">Reflective</option></select><span></span></div>
           <div class="ctl"><label for="speed">Speed</label><input id="speed" type="range" min="0" max="100" value="85"><span class="val" id="speedv">4 steps a frame</span></div>
-          <div class="ctl"><label for="rt">Clock</label><button id="rt" aria-pressed="false">Real time</button><span class="val" id="rtv">off</span></div>
-          <div class="ctl"><label for="cur">Current</label><input id="cur" type="range" min="0" max="100" value="50"><span class="val" id="curv">x16</span></div>
-          <div class="ctl"><label for="loss">Air loss</label><input id="loss" type="range" min="0" max="20" value="0"><span class="val" id="lossv">none</span></div>
+          <div class="ctl"><label for="rt">Clock</label><button id="rt" aria-pressed="false">True pitch</button><span class="val" id="rtv">off</span></div>
+          <div class="ctl"><label for="cur">Drift</label><input id="cur" type="range" min="0" max="100" value="50"><span class="val" id="curv">x16</span></div>
+          <div class="ctl"><label for="loss">Absorption</label><input id="loss" type="range" min="0" max="20" value="0"><span class="val" id="lossv">none</span></div>
           <h3>Listening</h3>
           <div class="ctl"><label for="m-vol">Volume</label><input id="m-vol" type="range" min="0" max="100" value="80"><span></span></div>
           <div class="ctl"><label for="m-room">Room</label><input id="m-room" type="range" min="2" max="80" value="22"><span class="val" id="m-roomv">2.2 s</span></div>
         </div>
         <details>
-          <summary>How the water works</summary>
-          <p class="hint">Your walls, posts and leaves are saved in this browser as you go. Loading a map replaces them.</p>
-          <p class="hint">The current runs from clashing water toward water that agrees with a leaf's chord, faster where that changes more steeply, never faster than the waves travel. A leaf moves at half the current under it. Current scales how hard a slope pushes.</p>
-          <p class="hint">Real time runs the clock at a hundredth of true pitch: A4 vibrates 4.40 times a second and every note at its own true rate. A cell is then about 7 cm and the map an 11 m room.</p>
-          <p class="hint">Air loss grows with the square of the frequency, so highs fade over distance far faster than lows: B5 loses about 14 times what C4 does. Low notes also bend around walls more, straight out of their longer waves.</p>
-          <p class="hint">The water runs on your graphics card. It holds up to 16 voices: a post is one, each note of a leaf's chord is one.</p>
-          <p class="hint">Colour echoes splits every source's water by bounce. Its walls swallow the waves that hit them and hand the same reflection a hard wall makes to the next bounce, so direct waves cast true shadows and each echo can be seen on its own. Added back together they are exactly the real water. The map edge is not counted as a bounce.</p>
-          <p class="hint">With a hard edge and no air loss nothing ever leaves the map. Sound trapped behind hard walls rings on until air loss takes it.</p>
-          <p class="hint">Strength is how hard a source pushes the water, in dB: it changes how far it carries, how much it weighs in a clash and how it pulls on leaves, and you hear it too. The other Sound and colour settings change what you hear and see only; the clash maths and the leaves always use the field's own 8-overtone tone.</p>
+          <summary>How the field works</summary>
+          <p class="hint">Your walls, sources and drifters are saved in this browser as you go. Loading a map replaces them.</p>
+          <p class="hint">Drift runs from dissonant regions toward regions consonant with a drifter's chord, faster where that changes more steeply, never faster than the waves travel. A drifter moves at half the drift under it. The Drift setting scales how hard a slope pushes.</p>
+          <p class="hint">True pitch runs the clock at a hundredth of real frequency: A4 vibrates 4.40 times a second and every note at its own true rate. A cell is then about 7 cm and the map an 11 m room.</p>
+          <p class="hint">Absorption grows with the square of the frequency, so highs fade over distance far faster than lows: B5 loses about 14 times what C4 does. Low notes also bend around walls more, straight out of their longer waves.</p>
+          <p class="hint">The field is computed on your graphics card. It holds up to 16 voices: a source is one, each note of a drifter's chord is one.</p>
+          <p class="hint">Reflections splits every source's field by reflection order. Each order's walls absorb the waves that hit them and hand the same reflection a reflective wall makes to the next order, so direct sound casts true shadows and each order can be seen on its own. Added back together they are exactly the full field. The map boundary is not counted as a reflection.</p>
+          <p class="hint">With a reflective boundary and no absorption nothing ever leaves the map. Sound trapped behind walls rings on until absorption takes it.</p>
+          <p class="hint">Gain is how hard a source drives the field, in dB: it changes how far it carries, how much it weighs in dissonance and how it pulls on drifters, and you hear it too. The other Sound and colour settings change what you hear and see only; the dissonance maths and the drifters always use the field's own 8-overtone tone.</p>
         </details>
       </div>
     </aside>
@@ -992,12 +992,12 @@ details[open] { display: grid; gap: 8px; }
     let E = 0, R = 0, P = 0;
     amps.forEach(([s, a], x) => { E += a * a; amps.forEach(([s2, b], y) => { if (y > x) { const w = a * b; P += w; R += w * clashOf(s, s2); } }); });
     const r = P > 1e-12 ? R / P : 0;
-    const verdict = E < 1e-8 ? 'still water' : r < 0.5 ? 'calm, constructive' : r < 0.7 ? 'tense' : 'turbulent';
+    const verdict = E < 1e-8 ? 'silent' : r < 0.5 ? 'consonant' : r < 0.7 ? 'tense' : 'dissonant';
     const x = hover % W, y = (hover / W) | 0;
     probe$.innerHTML =
       `<div>cell ${x}, ${y}</div>` +
       amps.map(([s, a]) => `<div class="bar"><span>${label(s)}</span><span><i style="width:${(100 * a / top).toFixed(0)}%"></i></span><span>${a.toFixed(3)}</span></div>`).join('') +
-      `<div>clash ${r.toFixed(2)} · <span class="verdict">${verdict}</span></div>`;
+      `<div>dissonance ${r.toFixed(2)} · <span class="verdict">${verdict}</span></div>`;
   }
 
   // ---------- sound: hear the water under the cursor ----------
@@ -1090,7 +1090,7 @@ details[open] { display: grid; gap: 8px; }
       if (hoverPost) c.setAttribute('data-iv', IV_CLASS[((Math.round(s - hoverPost.s) % 12) + 12) % 12]); else c.removeAttribute('data-iv');
     });
     document.getElementById('ivwho').textContent = hoverPost
-      ? 'Against post ' + label(hoverPost.s) + ':' : 'Hover a post to colour the notes against it.';
+      ? 'Against source ' + label(hoverPost.s) + ':' : 'Hover a source to class every note against it.';
     const cv = document.getElementById('chordv');
     cv.hidden = tool !== 'leaf';
     cv.textContent = 'Chord: ' + [...chord].sort((a, b) => a - b).map(label).join(' ');
@@ -1099,7 +1099,7 @@ details[open] { display: grid; gap: 8px; }
 
   function renderPosts() {
     const el = document.getElementById('posts');
-    if (!posts.length && !leaves.length) { el.innerHTML = '<span class="empty">Nothing yet. Pick a note and click the map.</span>'; return; }
+    if (!posts.length && !leaves.length) { el.innerHTML = '<span class="empty">Nothing yet. Pick a note and click the field.</span>'; return; }
     el.innerHTML = '';
     const row = (dot, text, obj, remove) => {
       const r = document.createElement('div'); r.className = 'post';
@@ -1113,15 +1113,15 @@ details[open] { display: grid; gap: 8px; }
       const d = document.createElement('button'); d.textContent = '✕'; d.className = 'x'; d.setAttribute('aria-label', 'Remove'); d.title = 'Remove'; d.onclick = remove;
       r.append(tn, m, d); el.appendChild(r);
     };
-    posts.forEach((p, k) => row('var(--fg)', `<b>${label(p.s)}</b> <span class="sub">post · ${p.x}, ${p.y}</span>`, p,
+    posts.forEach((p, k) => row('var(--fg)', `<b>${label(p.s)}</b> <span class="sub">source · ${p.x}, ${p.y}</span>`, p,
       () => { posts.splice(k, 1); changed(); }));
-    leaves.forEach((l, k) => row('var(--calm)', `<b>${l.chord.map(label).join(' ')}</b> <span class="sub">leaf · ${Math.round(l.x)}, ${Math.round(l.y)}</span>`, l,
+    leaves.forEach((l, k) => row('var(--calm)', `<b>${l.chord.map(label).join(' ')}</b> <span class="sub">drifter · ${Math.round(l.x)}, ${Math.round(l.y)}</span>`, l,
       () => { leaves.splice(k, 1); changed(); }));
   }
   function renderMatrix() {
     const ss = pitchesInPlay();
     const el = document.getElementById('mx');
-    if (ss.length < 2) { el.innerHTML = '<span class="empty">Needs two different notes on the map.</span>'; return; }
+    if (ss.length < 2) { el.innerHTML = '<span class="empty">Needs two different pitches in the field.</span>'; return; }
     let h = '<table class="mx"><tr><th></th>' + ss.map(s => `<th>${label(s)}</th>`).join('') + '</tr>';
     for (const a of ss) {
       h += `<tr><th>${label(a)}</th>`;
@@ -1137,8 +1137,8 @@ details[open] { display: grid; gap: 8px; }
 
   // ---------- which clash measure ----------
   const MX_HINT = {
-    ear: '0 is perfect agreement, 1 the harshest clash in the range. Ear: how much the notes\' overtones beat against each other in human hearing, which also counts low, crowded notes as rough.',
-    wave: '0 is perfect agreement, 1 the harshest clash in the range. Waves: how simple a ratio the two notes form (hover a number to see it), plus a cost for equal-tempered drift. The same in every octave.'
+    ear: '0 is perfect consonance, 1 the harshest dissonance in the range. Roughness: how much the pitches\' overtones beat against each other in human hearing (Plomp–Levelt, Sethares), which also counts low, crowded pitches as rough.',
+    wave: '0 is perfect consonance, 1 the harshest dissonance in the range. Ratio: how simple a whole-number ratio the two pitches form (hover a number to see it), plus a cost for equal-tempered drift. The same in every octave.'
   };
   function setMeasure(m) {
     measure = m;
@@ -1175,7 +1175,7 @@ details[open] { display: grid; gap: 8px; }
     $('s-pitch').value = Math.round((sel.s - pitchBase) * 100);
     $('s-pitchl').textContent = 'Octave ' + (2 + pitchBase / 12);
     $('s-pitchv').textContent = label(sel.s) + ' · ' + freqHz(sel.s).toFixed(1) + ' Hz';
-    $('tuneh').textContent = 'Tune post ' + label(sel.s);
+    $('tuneh').textContent = 'Tune source ' + label(sel.s);
   }
   $('s-pitch').addEventListener('input', e => { if (!sel || sel.chord) return; setPitch(sel, pitchBase + e.target.value / 100); renderPitch(); });
   $('p-snap').onclick = () => { if (!sel || sel.chord) return; setPitch(sel, Math.round(sel.s)); renderPitch(); };
@@ -1187,7 +1187,7 @@ details[open] { display: grid; gap: 8px; }
     if (sel && !sel.chord) pitchBase = 12 * Math.min(Math.floor(maxPitch() / 12), Math.floor(sel.s / 12));
     if (!sel) { $('tuneh').textContent = 'Tune'; return; }
     const s = sel.snd;
-    $('tuneh').textContent = 'Tune ' + (sel.chord ? 'leaf ' + sel.chord.map(label).join(' ') : 'post ' + label(sel.s));
+    $('tuneh').textContent = 'Tune ' + (sel.chord ? 'drifter ' + sel.chord.map(label).join(' ') : 'source ' + label(sel.s));
     renderLook(); renderPitch();
     $('s-shape').value = s.shape; $('s-filter').value = s.filter;
     $('s-cut').value = cutPos(s.cutoff); $('s-q').value = qPos(s.q);
@@ -1267,18 +1267,18 @@ details[open] { display: grid; gap: 8px; }
   const TOOLS = ['wall', 'post', 'leaf', 'erase'];
   function setTool(n) {
     tool = n; TOOLS.forEach(k => document.getElementById('t-' + k).setAttribute('aria-pressed', k === n ? 'true' : 'false'));
-    document.getElementById('noteh').textContent = n === 'leaf' ? 'Chord for the next leaf' : 'Note for the next post';
+    document.getElementById('noteh').textContent = n === 'leaf' ? 'Chord for the next drifter' : 'Pitch for the next source';
     document.getElementById('notehint').textContent = n === 'leaf'
-      ? 'Click notes to add or drop them from the chord, then click the map to drop a leaf. It sings its chord and drifts with the water.'
-      : 'Pick a note, then click the map to place a post. Hold Shift while drawing walls to keep them straight.';
+      ? 'Click notes to add or drop them from the chord, then click the field to drop a drifter. It carries its chord and drifts toward consonance.'
+      : 'Pick a note, then click the field to place a source. Hold Shift while drawing walls to keep them straight.';
     renderNotes();
   }
   TOOLS.forEach(k => document.getElementById('t-' + k).onclick = () => setTool(k));
   const LEG = {
-    water: '<span class="swatch sw-water"></span>the raw water: trough to crest, all notes added together',
-    harm: '<span class="swatch sw-harm"></span>calm and constructive to turbulent, brightness is strength',
-    turb: '<span class="swatch" style="background:linear-gradient(90deg,var(--deep),var(--turb))"></span>turbulence only',
-    colour: '<span class="swatch" style="background:linear-gradient(90deg,#e8606a,#e8c060,#60e8a0,#60a8e8,#b060e8)"></span>the real water, crests coloured by the source making them'
+    water: '<span class="swatch sw-water"></span>the raw field: trough to crest, all sources added together',
+    harm: '<span class="swatch sw-harm"></span>consonant to dissonant, brightness is intensity',
+    turb: '<span class="swatch" style="background:linear-gradient(90deg,var(--deep),var(--turb))"></span>dissonance only',
+    colour: '<span class="swatch" style="background:linear-gradient(90deg,#e8606a,#e8c060,#60e8a0,#60a8e8,#b060e8)"></span>the full field, crests coloured by the source making them'
   };
   function setView(n) { view = n; ['water', 'harm', 'turb', 'colour'].forEach(k => document.getElementById('v-' + k).setAttribute('aria-pressed', k === n ? 'true' : 'false')); document.getElementById('leg').innerHTML = LEG[n]; }
   ['water', 'harm', 'turb', 'colour'].forEach(k => document.getElementById('v-' + k).onclick = () => setView(k));
@@ -1375,9 +1375,9 @@ details[open] { display: grid; gap: 8px; }
   // the water has room for 16 voices: each post is one, each note of a leaf's chord is one
   function flashFull() {
     const h = $('notehint'), was = h.textContent;
-    h.textContent = 'The water is full: 16 voices at most (a post is one, each note of a leaf is one). Remove something first.';
+    h.textContent = 'The field is full: 16 voices at most (a source is one, each note of a drifter is one). Remove something first.';
     h.style.color = 'var(--turb)';
-    setTimeout(() => { h.style.color = ''; if (h.textContent.startsWith('The water is full')) h.textContent = was; }, 3500);
+    setTimeout(() => { h.style.color = ''; if (h.textContent.startsWith('The field is full')) h.textContent = was; }, 3500);
   }
   function commitStraight() {
     let wallsChanged = false;
