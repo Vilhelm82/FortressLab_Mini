@@ -66,6 +66,12 @@ select { font: 13px var(--font-body); background: var(--raise); color: var(--fg)
 .tune .row label { min-width: 64px; }
 .tune input[type=range] { flex: 1; min-width: 90px; }
 .tune .val { font-family: var(--font-data); font-size: 11px; color: var(--muted); min-width: 56px; text-align: right; }
+.tune h3 { font: 600 11px var(--font-body); text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); margin: 6px 0 0; }
+.slots { display: grid; grid-template-columns: repeat(12, 1fr); gap: 3px; }
+.slots button { aspect-ratio: 1; padding: 0; border-radius: 4px; border: 1px solid var(--line); min-width: 0; }
+.slots button.off { opacity: 0.25; }
+.slots button[aria-pressed="true"] { outline: 2px solid var(--fg); outline-offset: 1px; }
+input[type=color] { width: 44px; height: 30px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: var(--raise); cursor: pointer; }
 .post .dot { width: 10px; height: 10px; border-radius: 50%; }
 .post .nm { font-family: var(--font-data); }
 .post button { padding: 3px 8px; font-size: 12px; }
@@ -104,6 +110,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
           <button id="v-water" aria-pressed="false">Water</button>
           <button id="v-harm" aria-pressed="true">Harmony</button>
           <button id="v-turb" aria-pressed="false">Turbulence</button>
+          <button id="v-colour" aria-pressed="false">Wave colours</button>
         </div>
         <span class="spacer"></span>
         <button id="sound" aria-pressed="false">Sound on</button>
@@ -144,7 +151,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
       <div class="card">
         <h2 id="tuneh">Sound</h2>
         <div class="tune" id="tune">
-          <p class="hint" id="tuneempty">Press Sound on a post or leaf in the list above to shape how it sounds.</p>
+          <p class="hint" id="tuneempty">Press Tune on a post or leaf in the list above to shape how it sounds and how its waves are coloured.</p>
           <div id="tunebody" hidden>
             <div class="tune">
               <div class="row"><label for="s-shape">Wave</label>
@@ -155,7 +162,18 @@ table.mx th { color: var(--muted); font-weight: 500; }
               <div class="row"><label for="s-q">Resonance</label><input id="s-q" type="range" min="0" max="100" value="20"><span class="val" id="s-qv"></span></div>
               <div class="row"><label for="s-vol">Volume</label><input id="s-vol" type="range" min="0" max="200" value="100"><span class="val" id="s-volv"></span></div>
               <div class="row"><label for="s-verb">Reverb</label><input id="s-verb" type="range" min="0" max="100" value="25"><span class="val" id="s-verbv"></span></div>
-              <div class="row"><button id="s-all">Use these settings on everything</button></div>
+              <div class="row"><button id="s-all">Use this sound on everything</button></div>
+              <h3>Wave colours</h3>
+              <p class="hint">Shown in the Wave colours view. Each wave this source sends out takes the next colour in its cycle.</p>
+              <div class="row"><label for="c-pick">Colour</label><input id="c-pick" type="color" value="#5fd4c6">
+                <label for="c-len">Cycle</label><select id="c-len"></select></div>
+              <div class="slots" id="c-slots" aria-label="Colour of each wave in the cycle"></div>
+              <div class="row">
+                <button id="c-all">Paint all</button>
+                <button id="c-3">Every 3rd</button>
+                <button id="c-5">Every 5th</button>
+              </div>
+              <div class="row"><button id="c-note">Copy colours to everything on this note</button></div>
             </div>
           </div>
           <div class="row"><label for="m-vol">Master</label><input id="m-vol" type="range" min="0" max="100" value="80" style="flex:1"></div>
@@ -289,6 +307,17 @@ table.mx th { color: var(--muted); font-weight: 500; }
   let nextId = 1;
   // how a source sounds when you listen; this is for your ears only, the clash maths always uses the 8-overtone tone
   const DEF_SND = () => ({ shape: 'overtones', filter: 'none', cutoff: 2000, q: 1, vol: 1, verb: 0.25 });
+  // wave colours: a cycle of up to 12 slots; the n-th wave a source sends out takes slot n mod len.
+  // a new source starts with every slot one colour, picked from a colour wheel by its pitch class
+  const hsl2hex = (h, s, l) => { s /= 100; l /= 100; const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+    const f = n => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)))).toString(16).padStart(2, '0');
+    return '#' + f(0) + f(8) + f(4); };
+  const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  function lookOf(src) {
+    if (!src.snd.look) { const pc = (src.chord ? src.chord[0] : src.s) % 12; src.snd.look = { len: 12, slots: Array(12).fill(hsl2hex(pc * 30, 70, 62)) }; }
+    const L = src.snd.look; if (!L.rgb || L.rgbOf !== L.slots.join()) { L.rgb = L.slots.map(hex2rgb); L.rgbOf = L.slots.join(); }
+    return L;
+  }
   let sel = null;               // the post or leaf whose sound is being tuned
   // One wave layer per source group: all posts on a note share one; each leaf has its own per note,
   // so a leaf can tell its own song apart from everyone else's.
@@ -428,7 +457,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
   const ctx = view$.getContext('2d');
   const off = document.createElement('canvas'); off.width = W; off.height = H;
   const octx = off.getContext('2d'); const img = octx.createImageData(W, H);
-  let gWater = 1e-3, gS = 1e-3, gR = 1e-3, cell = 4;
+  let gWater = 1e-3, gS = 1e-3, gR = 1e-3, gColour = 1e-3, cell = 4;
 
   function size() {
     const box = view$.parentElement.getBoundingClientRect();
@@ -444,10 +473,31 @@ table.mx th { color: var(--muted); font-weight: 500; }
 
   function draw() {
     const arr = Ns(), px = img.data;
-    let mW = 0, mS = 0, mR = 0;
+    let mW = 0, mS = 0, mR = 0, mC = 0;
     for (let i = 0; i < N; i++) {
       let c;
       if (wall[i]) c = COL.bg;
+      else if (view === 'colour') {
+        // Each source's waves drawn in their own colours. Which wave a crest is comes from how far it has
+        // travelled from its source, snapped to the real crest using the wave's own phase in this cell.
+        // Echoes off walls take the colour of the wave due at that distance, not the one that bounced.
+        const x = i % W, y = (i / W) | 0;
+        let r0 = COL.deep[0], g0 = COL.deep[1], b0 = COL.deep[2];
+        for (const L of layers.values()) {
+          const src = L.src; if (src.muted) continue;
+          const u = L.u[i]; mC = Math.max(mC, Math.abs(u));
+          const w = Math.max(-1, Math.min(1, u / gColour)); if (Math.abs(w) < 0.02) continue;
+          const sx = src.x, sy = src.y;
+          const k = L.omega / WAVE_C, geo = L.omega * t - k * Math.hypot(x - sx, y - sy);
+          const psi = Math.atan2(u, (u - L.up[i]) / L.omega);
+          let d = (psi - geo) % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI;
+          const n = Math.round((geo + d - Math.PI / 2) / (2 * Math.PI));
+          const look = lookOf(src), col = look.rgb[((n % look.len) + look.len) % look.len];
+          if (w > 0) { r0 += w * (col[0] - COL.deep[0]); g0 += w * (col[1] - COL.deep[1]); b0 += w * (col[2] - COL.deep[2]); }
+          else { r0 *= 1 + 0.6 * w; g0 *= 1 + 0.6 * w; b0 *= 1 + 0.6 * w; }
+        }
+        c = [Math.min(255, Math.max(0, r0)), Math.min(255, Math.max(0, g0)), Math.min(255, Math.max(0, b0))];
+      }
       else if (view === 'water') {
         let v = 0; for (const L of layers.values()) v += L.u[i];
         mW = Math.max(mW, Math.abs(v));
@@ -469,6 +519,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
     }
     // auto gain: rises instantly, falls slowly, so the picture stays readable as the tank fills
     if (view === 'water') gWater = Math.max(mW, gWater * 0.985, 1e-3);
+    else if (view === 'colour') gColour = Math.max(mC * 0.8, gColour * 0.985, 1e-3);
     else { gS = Math.max(mS, gS * 0.985, 1e-3); gR = Math.max(mR, gR * 0.985, 1e-3); }
     octx.putImageData(img, 0, 0);
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
@@ -620,7 +671,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
       const r = document.createElement('div'); r.className = 'post';
       r.innerHTML = `<span class="dot" style="background:${obj.muted ? 'var(--line)' : dot}"></span><span class="nm">${text}</span>`;
       if (obj === sel) r.style.boxShadow = 'inset 2px 0 0 var(--stone)';
-      const tn = document.createElement('button'); tn.textContent = 'Sound';
+      const tn = document.createElement('button'); tn.textContent = 'Tune';
       tn.setAttribute('aria-pressed', obj === sel ? 'true' : 'false');
       tn.onclick = () => { sel = obj; renderPosts(); renderTune(); };
       const m = document.createElement('button'); m.textContent = obj.muted ? 'Unmute' : 'Mute';
@@ -674,7 +725,8 @@ table.mx th { color: var(--muted); font-weight: 500; }
     $('tuneempty').hidden = !!sel; $('tunebody').hidden = !sel;
     if (!sel) { $('tuneh').textContent = 'Sound'; return; }
     const s = sel.snd;
-    $('tuneh').textContent = 'Sound of ' + (sel.chord ? 'leaf ' + sel.chord.map(label).join(' ') : 'post ' + label(sel.s));
+    $('tuneh').textContent = sel.chord ? 'Leaf ' + sel.chord.map(label).join(' ') : 'Post ' + label(sel.s);
+    renderLook();
     $('s-shape').value = s.shape; $('s-filter').value = s.filter;
     $('s-cut').value = cutPos(s.cutoff); $('s-q').value = qPos(s.q);
     $('s-vol').value = s.vol * 100; $('s-verb').value = s.verb * 100;
@@ -691,7 +743,39 @@ table.mx th { color: var(--muted); font-weight: 500; }
   tuneInput('s-q', (s, v) => { s.q = qOf(+v); });
   tuneInput('s-vol', (s, v) => { s.vol = +v / 100; });
   tuneInput('s-verb', (s, v) => { s.verb = +v / 100; });
-  $('s-all').onclick = () => { if (!sel) return; for (const o of [...posts, ...leaves]) if (o !== sel) o.snd = { ...sel.snd }; };
+  $('s-all').onclick = () => { if (!sel) return; for (const o of [...posts, ...leaves]) if (o !== sel) { const look = o.snd.look; o.snd = { ...sel.snd, look }; } };
+
+  // ---------- wave colours for the selected source ----------
+  let slotSel = 0;
+  for (let n = 1; n <= 12; n++) { const o = document.createElement('option'); o.value = n; o.textContent = n === 1 ? '1 wave' : n + ' waves'; $('c-len').appendChild(o); }
+  for (let k = 0; k < 12; k++) {
+    const b = document.createElement('button'); b.setAttribute('aria-label', 'Wave ' + (k + 1));
+    b.onclick = () => { if (!sel) return; slotSel = k; const L = lookOf(sel); L.slots[k] = $('c-pick').value; renderLook(); };
+    $('c-slots').appendChild(b);
+  }
+  function renderLook() {
+    if (!sel) return;
+    const L = lookOf(sel);
+    $('c-len').value = L.len;
+    [...$('c-slots').children].forEach((b, k) => {
+      b.style.background = L.slots[k]; b.className = k < L.len ? '' : 'off';
+      b.setAttribute('aria-pressed', k === slotSel ? 'true' : 'false');
+    });
+  }
+  $('c-pick').addEventListener('input', e => { if (!sel) return; lookOf(sel).slots[slotSel] = e.target.value; renderLook(); });
+  $('c-len').onchange = e => { if (!sel) return; lookOf(sel).len = +e.target.value; renderLook(); };
+  $('c-all').onclick = () => { if (!sel) return; const L = lookOf(sel); L.slots.fill($('c-pick').value); renderLook(); };
+  // every Nth wave in the picked colour, the rest left as wave 2's colour; the cycle is set to fit evenly
+  function everyNth(nth, len) {
+    if (!sel) return; const L = lookOf(sel), base = L.slots[1] === $('c-pick').value ? L.slots[2] : L.slots[1];
+    L.len = len; for (let k = 0; k < 12; k++) L.slots[k] = k % nth === 0 ? $('c-pick').value : base; renderLook();
+  }
+  $('c-3').onclick = () => everyNth(3, 12);
+  $('c-5').onclick = () => everyNth(5, 10);
+  $('c-note').onclick = () => {
+    if (!sel) return; const L = lookOf(sel), notesOf = o => o.chord || [o.s], mine = notesOf(sel);
+    for (const o of [...posts, ...leaves]) if (o !== sel && notesOf(o).some(n => mine.includes(n))) o.snd.look = { len: L.len, slots: [...L.slots] };
+  };
   $('m-ear').onclick = () => setMeasure('ear');
   $('m-wave').onclick = () => setMeasure('wave');
   $('m-vol').oninput = e => { masterVol = +e.target.value / 100; };
@@ -711,10 +795,11 @@ table.mx th { color: var(--muted); font-weight: 500; }
   const LEG = {
     water: '<span class="swatch sw-water"></span>the raw water: trough to crest, all notes added together',
     harm: '<span class="swatch sw-harm"></span>calm and constructive to turbulent, brightness is strength',
-    turb: '<span class="swatch" style="background:linear-gradient(90deg,var(--deep),var(--turb))"></span>turbulence only'
+    turb: '<span class="swatch" style="background:linear-gradient(90deg,var(--deep),var(--turb))"></span>turbulence only',
+    colour: '<span class="swatch" style="background:linear-gradient(90deg,#e8606a,#e8c060,#60e8a0,#60a8e8,#b060e8)"></span>each source\'s waves in their own colours'
   };
-  function setView(n) { view = n; ['water', 'harm', 'turb'].forEach(k => document.getElementById('v-' + k).setAttribute('aria-pressed', k === n ? 'true' : 'false')); document.getElementById('leg').innerHTML = LEG[n]; }
-  ['water', 'harm', 'turb'].forEach(k => document.getElementById('v-' + k).onclick = () => setView(k));
+  function setView(n) { view = n; ['water', 'harm', 'turb', 'colour'].forEach(k => document.getElementById('v-' + k).setAttribute('aria-pressed', k === n ? 'true' : 'false')); document.getElementById('leg').innerHTML = LEG[n]; }
+  ['water', 'harm', 'turb', 'colour'].forEach(k => document.getElementById('v-' + k).onclick = () => setView(k));
   const run$ = document.getElementById('run');
   run$.onclick = () => { running = !running; run$.textContent = running ? 'Pause' : 'Run'; };
   document.getElementById('reset').onclick = resetWaves;
