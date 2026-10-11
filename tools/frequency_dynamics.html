@@ -45,7 +45,8 @@ button:hover { background: var(--raise); }
 button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--stone); outline-offset: 2px; }
 .spacer { flex: 1; }
 .canvas-box { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--deep); touch-action: none; }
-canvas#view { display: block; width: 100%; height: auto; cursor: crosshair; }
+canvas#view { position: relative; display: block; width: 100%; height: auto; cursor: crosshair; }
+canvas#gl { position: absolute; left: 0; top: 0; width: 100%; display: block; }
 .legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: 12px; align-items: center; }
 .swatch { display: inline-block; width: 26px; height: 8px; border-radius: 4px; vertical-align: middle; margin-right: 6px; }
 .sw-water { background: linear-gradient(90deg, var(--deep), var(--crest)); }
@@ -159,7 +160,7 @@ details[open] { display: grid; gap: 8px; }
         <span class="spacer"></span>
         <div class="seg" role="group" aria-label="Toggles">
           <button id="cw" aria-pressed="false">Colour waves</button>
-          <button id="ce" aria-pressed="false" title="Colour the waves that have bounced off a wall in each source's echo colour">Colour echoes</button>
+          <button id="ce" aria-pressed="false" title="Colour the waves by how many times they have bounced off a wall: first, second, third and after, in each source's echo colours">Colour echoes</button>
           <button id="sound" aria-pressed="false">Sound on</button>
         </div>
         <div class="seg" role="group" aria-label="Playback">
@@ -167,7 +168,7 @@ details[open] { display: grid; gap: 8px; }
           <button id="reset">Reset waves</button>
         </div>
       </div>
-      <div class="canvas-box"><canvas id="view" aria-label="Ripple tank map"></canvas></div>
+      <div class="canvas-box"><canvas id="gl" aria-hidden="true"></canvas><canvas id="view" aria-label="Ripple tank map"></canvas></div>
       <div class="legend">
         <span id="leg"><span class="swatch sw-harm"></span>calm and constructive to turbulent, brightness is strength</span>
         <span><span class="swatch sw-wall"></span>hard wall</span>
@@ -243,7 +244,7 @@ details[open] { display: grid; gap: 8px; }
             <div class="ctl"><label for="c-pick">Colour</label>
               <div class="pickrow"><input id="c-pick" type="color" value="#5fd4c6"><select id="c-len" aria-label="Cycle length"></select></div><span></span></div>
             <div class="slots" id="c-slots" aria-label="Colour of each wave in the cycle"></div>
-            <div class="ctl"><label for="c-echo">Echoes</label><div class="pickrow"><input id="c-echo" type="color" value="#f4f1e8"><span class="hint">waves that have bounced</span></div><span></span></div>
+            <div class="ctl"><label for="c-echo1">Echoes</label><div class="pickrow"><input id="c-echo1" type="color" value="#f4f1e8" title="First bounce"><input id="c-echo2" type="color" value="#e8b04a" title="Second bounce"><input id="c-echo3" type="color" value="#9a6ae0" title="Third bounce and after"><span class="hint">1st, 2nd, 3rd+ bounce</span></div><span></span></div>
             <div class="btnrow">
               <button id="c-all">Paint all</button>
               <button id="c-3">Every 3rd</button>
@@ -284,6 +285,8 @@ details[open] { display: grid; gap: 8px; }
           <p class="hint">The current runs from clashing water toward water that agrees with a leaf's chord, faster where that changes more steeply, never faster than the waves travel. A leaf moves at half the current under it. Current scales how hard a slope pushes.</p>
           <p class="hint">Real time runs the clock at a hundredth of true pitch: A4 vibrates 4.40 times a second and every note at its own true rate. A cell is then about 7 cm and the map an 11 m room.</p>
           <p class="hint">Air loss grows with the square of the frequency, so highs fade over distance far faster than lows: B5 loses about 14 times what C4 does. Low notes also bend around walls more, straight out of their longer waves.</p>
+          <p class="hint">The water runs on your graphics card. It holds up to 16 voices: a post is one, each note of a leaf's chord is one.</p>
+          <p class="hint">Colour echoes splits every source's water by bounce. Its walls swallow the waves that hit them and hand the same reflection a hard wall makes to the next bounce, so direct waves cast true shadows and each echo can be seen on its own. Added back together they are exactly the real water. The map edge is not counted as a bounce.</p>
           <p class="hint">With a hard edge and no air loss nothing ever leaves the map. Sound trapped behind hard walls rings on until air loss takes it.</p>
           <p class="hint">Strength is how hard a source pushes the water, in dB: it changes how far it carries, how much it weighs in a clash and how it pulls on leaves, and you hear it too. The other Sound and colour settings change what you hear and see only; the clash maths and the leaves always use the field's own 8-overtone tone.</p>
         </details>
@@ -406,153 +409,444 @@ details[open] { display: grid; gap: 8px; }
     const f = n => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)))).toString(16).padStart(2, '0');
     return '#' + f(0) + f(8) + f(4); };
   const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const ECHO_DEF = ['#f4f1e8', '#e8b04a', '#9a6ae0'];
   function lookOf(src) {
     if (!src.snd.look) { const pc = ((Math.round(src.chord ? src.chord[0] : src.s) % 12) + 12) % 12; src.snd.look = { len: 12, slots: Array(12).fill(hsl2hex(pc * 30, 70, 62)) }; }
-    const L = src.snd.look; if (!L.echo) L.echo = '#f4f1e8';
-    if (!L.rgb || L.rgbOf !== L.slots.join() + L.echo) { L.rgb = L.slots.map(hex2rgb); L.echoRgb = hex2rgb(L.echo); L.rgbOf = L.slots.join() + L.echo; }
+    const L = src.snd.look;
+    // echo colours, one per bounce: first, second, third and after (older maps saved a single colour)
+    if (!Array.isArray(L.echo)) L.echo = [typeof L.echo === 'string' ? L.echo : ECHO_DEF[0], ECHO_DEF[1], ECHO_DEF[2]];
+    const sig = L.slots.join() + L.echo.join();
+    if (!L.rgb || L.rgbOf !== sig) { L.rgb = L.slots.map(hex2rgb); L.echoRgb = L.echo.map(hex2rgb); L.rgbOf = sig; }
     return L;
   }
   let sel = null;               // the post or leaf whose sound is being tuned
-  // One wave layer per source group: all posts on a note share one; each leaf has its own per note,
-  // so a leaf can tell its own song apart from everyone else's.
-  let layers = new Map();       // key -> {key, s, src, omega, u, up, un, e}
-  let notes = new Map();        // s -> {s, e}: the combined strength of each note, what you see and hear
+
+  // ---------- the water, on the graphics card ----------
+  // Every post, and every note of every leaf, owns a slot on the GPU. With echoes coloured, a slot holds one layer per
+  // bounce generation: direct waves, 1st bounce, 2nd bounce, and everything after. Otherwise a slot is one layer.
+  //
+  // Bounce generations: a generation's walls absorb what hits them (a one-way boundary, Mur's first order) and hand
+  // exactly the reflection a hard wall would have made to the next generation. The last generation keeps hard walls.
+  // Added up, the generations are exactly the real water; each one on its own is the waves that have bounced that
+  // many times, with true shadows behind walls.
+  const MAXL = 16, GENS_ECHO = 4, MW = 64, MH = 40, MAXPTS = 64;
+  let layers = new Map();       // key -> {key, s, src, slot, omega, phase, fPrev}
   let t = 0, running = true, tool = 'wall', view = 'harm', note = 0, octave = 4;
   let chord = new Set([24, 28, 31]);   // C4 E4 G4
   let edgeOpen = true, air = 0, speed = 4, pending = 0, kappa = 0.5 * Math.pow(1000, 0.5);
-  let nL, nR, nU, nD, live, sigma, warming = true;
-  let fL, fR, fU, fD, sigmaF, echoes = false;   // the free-space twin, used only while echoes are coloured
+  let warming = true, echoes = false, GEN = 1;
 
-  function rebuild() {
-    nL = new Int32Array(N); nR = new Int32Array(N); nU = new Int32Array(N); nD = new Int32Array(N);
-    sigma = new Float32Array(N);
-    const lv = [];
-    for (let i = 0; i < N; i++) {
-      if (wall[i]) continue;
-      const x = i % W, y = (i / W) | 0;
-      // A wall or the map edge mirrors the cell back on itself: zero slope, perfect reflection.
-      nL[i] = (x > 0 && !wall[i - 1]) ? i - 1 : i;
-      nR[i] = (x < W - 1 && !wall[i + 1]) ? i + 1 : i;
-      nU[i] = (y > 0 && !wall[i - W]) ? i - W : i;
-      nD[i] = (y < H - 1 && !wall[i + W]) ? i + W : i;
-      let s = 0;
-      if (edgeOpen) { const d = Math.min(x, y, W - 1 - x, H - 1 - y); if (d < SPONGE) s += SMAX * Math.pow((SPONGE - d) / SPONGE, 2); }
-      sigma[i] = s; lv.push(i);
+  const view$ = document.getElementById('view');            // the overlay: walls, posts, leaves, and where you click
+  const ctx = view$.getContext('2d');
+  const glcv = document.getElementById('gl');               // the water itself
+  const gl = glcv.getContext('webgl2', { antialias: false, depth: false, stencil: false, premultipliedAlpha: false });
+  let GPU_OK = !!gl && !!gl.getExtension('EXT_color_buffer_float');
+
+  const VS = `#version 300 es
+  const vec2 P[3] = vec2[3](vec2(-1.,-1.), vec2(3.,-1.), vec2(-1.,3.));
+  void main() { gl_Position = vec4(P[gl_VertexID], 0., 1.); }`;
+  const HEAD = `#version 300 es
+  precision highp float; precision highp int; precision highp sampler2DArray; precision highp sampler2D;
+  uniform ivec2 uSize; uniform sampler2D uWall; out vec4 o;
+  bool wallAt(ivec2 q) { return texelFetch(uWall, q, 0).r > 0.5; }
+  bool inside(ivec2 q) { return q.x >= 0 && q.y >= 0 && q.x < uSize.x && q.y < uSize.y; }
+  const ivec2 D4[4] = ivec2[4](ivec2(-1,0), ivec2(1,0), ivec2(0,-1), ivec2(0,1));
+  `;
+
+  // one step of one layer: the wave update, the absorbing (or hard) walls, the hand-over from the previous generation
+  const FS_STEP = HEAD + `
+  uniform sampler2DArray uS; uniform int uSlice, uPrev, uSponge; uniform bool uMur, uOpen;
+  uniform float uAir, uSmax, uC2, uPush; uniform ivec2 uSrc;
+  float sponge(ivec2 p) {
+    if (!uOpen) return 0.;
+    int d = min(min(p.x, p.y), min(uSize.x - 1 - p.x, uSize.y - 1 - p.y));
+    if (d >= uSponge) return 0.;
+    float f = float(uSponge - d) / float(uSponge); return uSmax * f * f;
+  }
+  void main() {
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    vec4 c = texelFetch(uS, ivec3(p, uSlice), 0);
+    if (wallAt(p)) { o = vec4(c.r, c.g, 0., 0.); return; }      // a wall cell carries this layer's boundary value
+    float u = c.r, up = c.g, lap = 0.;
+    float prevU = uPrev >= 0 ? texelFetch(uS, ivec3(p, uPrev), 0).r : 0.;
+    for (int k = 0; k < 4; k++) {
+      ivec2 q = p + D4[k];
+      if (!inside(q)) continue;                                   // the map edge mirrors: no slope across it
+      if (wallAt(q)) {
+        if (uMur) lap += texelFetch(uS, ivec3(q, uSlice), 0).r - u;                  // absorbing wall
+        if (uPrev >= 0) lap += prevU - texelFetch(uS, ivec3(q, uPrev), 0).r;          // the previous generation's reflection
+      } else lap += texelFetch(uS, ivec3(q, uSlice), 0).r - u;
     }
-    live = Int32Array.from(lv);
-    paintWalls();
-    // The same map with no walls and soft edges all round: what each source's waves would do if nothing were in
-    // the way. Subtracting it from the real water leaves exactly the waves that walls (or a hard edge) sent back.
-    fL = new Int32Array(N); fR = new Int32Array(N); fU = new Int32Array(N); fD = new Int32Array(N); sigmaF = new Float32Array(N);
-    for (let i = 0; i < N; i++) {
-      const x = i % W, y = (i / W) | 0;
-      fL[i] = x > 0 ? i - 1 : i; fR[i] = x < W - 1 ? i + 1 : i; fU[i] = y > 0 ? i - W : i; fD[i] = y < H - 1 ? i + W : i;
-      const d = Math.min(x, y, W - 1 - x, H - 1 - y); sigmaF[i] = d < SPONGE ? SMAX * Math.pow((SPONGE - d) / SPONGE, 2) : 0;
+    float s = sponge(p) + uAir;
+    float un = (2. * u - (1. - s) * up + uC2 * lap) / (1. + s);
+    if (p == uSrc) un += uPush;
+    o = vec4(un, u, 0., 0.);
+  }`;
+
+  // the absorbing walls: each wall cell next to water takes the value a wave leaving through it would have
+  const FS_GHOST = HEAD + `
+  uniform sampler2DArray uS; uniform int uSlice; uniform bool uMur; uniform float uK;
+  void main() {
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    vec4 c = texelFetch(uS, ivec3(p, uSlice), 0);
+    if (!wallAt(p)) { o = c; return; }
+    if (!uMur) { o = vec4(0.); return; }
+    float sum = 0.; int n = 0;
+    for (int k = 0; k < 4; k++) {
+      ivec2 q = p + D4[k];
+      if (!inside(q) || wallAt(q)) continue;
+      vec4 a = texelFetch(uS, ivec3(q, uSlice), 0);
+      sum += a.g + uK * (a.r - c.r); n++;
     }
-    for (const L of layers.values()) for (let i = 0; i < N; i++) if (wall[i]) { L.u[i] = 0; L.up[i] = 0; L.un[i] = 0; L.e[i] = 0; }
-    for (const n of notes.values()) for (let i = 0; i < N; i++) if (wall[i]) n.e[i] = 0;
+    o = vec4(n > 0 ? sum / float(n) : 0., c.r, 0., 0.);
+  }`;
+
+  // shared reading of the water at a cell: every layer's total, every note group's strength, the clash between them
+  const READ = `
+  uniform sampler2DArray uS; uniform sampler2D uInfo; uniform sampler2D uLut; uniform sampler2D uClash;
+  uniform int uNL, uNG, uGEN;
+  const float PI = 3.14159265, TAU = 6.2831853;
+  vec4 info(int i, int r) { return texelFetch(uInfo, ivec2(i, r), 0); }
+  vec4 gen(int i, int g, ivec2 p) { return texelFetch(uS, ivec3(p, int(info(i, 1).x) * uGEN + g), 0); }
+  // the exact height of a single-pitch wave from two steps of it: law of cosines on the phasor
+  float ampOf(float u, float up, float w) { float s = sin(w); return sqrt(max(0., u * u + up * up - 2. * u * up * cos(w)) / (s * s)); }
+  float clashG(int a, int b) { return texelFetch(uClash, ivec2(a, b), 0).r; }
+  vec3 lut(int i, int k) { return texelFetch(uLut, ivec2(k, i), 0).rgb; }
+  vec3 waveCol(int i, ivec2 p, float u, float up) {
+    vec4 a = info(i, 0); float w = a.w;
+    float geo = a.z - (w / 0.5) * length(vec2(p) - a.xy);
+    float psi = atan(u, (u - up) / w);
+    float d = mod(psi - geo + PI, TAU) - PI;
+    float n = floor((geo + d - 0.5 * PI) / TAU + 0.5);
+    float len = info(i, 1).w;
+    return lut(i, int(mod(n, len)));
+  }
+  float tu[16], tup[16], A[16];
+  float E, R, P, V, S;
+  void readCell(ivec2 p) {
+    V = 0.;
+    for (int i = 0; i < uNL; i++) {
+      float a = 0., b = 0.;
+      for (int g = 0; g < uGEN; g++) { vec4 q = gen(i, g, p); a += q.r; b += q.g; }
+      tu[i] = a; tup[i] = b; V += a;
+    }
+    E = 0.; R = 0.; P = 0.;
+    for (int g = 0; g < uNG; g++) {
+      float a = 0., b = 0., w = 1.;
+      for (int i = 0; i < uNL; i++) if (int(info(i, 1).y) == g) { a += tu[i]; b += tup[i]; w = info(i, 0).w; }
+      A[g] = ampOf(a, b, w); E += A[g] * A[g];
+    }
+    for (int x = 0; x < uNG; x++) for (int y = x + 1; y < uNG; y++) { float w = A[x] * A[y]; P += w; R += w * clashG(x, y); }
+    S = sqrt(E);
+  }`;
+
+  // the picture
+  const FS_VIEW = HEAD + READ + `
+  uniform int uView; uniform bool uCW; uniform float uGW, uGS, uGR, uGC;
+  uniform vec3 uDeep, uCrest, uCalm, uTurb, uBg;
+  vec3 mixc(vec3 a, vec3 b, float k) { return a + (b - a) * k; }
+  void main() {
+    ivec2 p = ivec2(int(gl_FragCoord.x), uSize.y - 1 - int(gl_FragCoord.y));
+    if (wallAt(p)) { o = vec4(uBg, 1.); return; }
+    readCell(p);
+    vec3 c;
+    vec3 acc = vec3(0.); float ws = 0., absParts = 0.;
+    float sgn = V >= 0. ? 1. : -1.;
+    if (uView == 0 || uView == 3) {
+      // weights: water by how hard each part moves it, colour view by the parts pushing the way the water is going
+      if (uView == 3 || uCW) for (int i = 0; i < uNL; i++) {
+        bool muted = info(i, 1).z > 0.5;
+        if (uGEN > 1) {
+          for (int g = 0; g < uGEN; g++) {
+            vec4 q = gen(i, g, p);
+            float w = uView == 0 ? abs(q.r) : q.r * sgn;
+            absParts += abs(q.r);
+            if (muted || w <= 0.) continue;
+            vec3 col = g == 0 ? waveCol(i, p, q.r, q.g) : lut(i, 11 + g);
+            acc += w * col; ws += w;
+          }
+        } else {
+          float w = uView == 0 ? abs(tu[i]) : tu[i] * sgn;
+          absParts += abs(tu[i]);
+          if (muted || w <= 0.) continue;
+          acc += w * waveCol(i, p, tu[i], tup[i]); ws += w;
+        }
+      }
+      if (uView == 0) {
+        float k = clamp(V / uGW, -1., 1.);
+        vec3 top = uCrest;
+        // only colour as much water as is really there: bounce generations cancel behind walls
+        if (uCW && ws > 0.) top = mixc(uCrest, acc / ws, absParts > 1e-9 ? min(1., abs(V) / absParts) : 0.);
+        c = mixc(uDeep, top, 0.5 + 0.5 * k);
+      } else {
+        float kk = clamp(V / uGC, -1., 1.);
+        if (kk > 0. && ws > 0.) c = mixc(uDeep, acc / ws, kk);
+        else if (kk < 0.) c = uDeep * (1. + 0.75 * kk);
+        else c = uDeep;
+      }
+    } else if (uView == 1) {
+      float b = min(1., sqrt(S / uGS));
+      float cl = P > 1e-12 ? R / P : 0.;
+      float r = min(1., cl * cl);                  // squared, so consonant chords sit calm and only real clashes run hot
+      vec3 calm = uCalm;
+      if (uCW) {
+        for (int i = 0; i < uNL; i++) {
+          if (info(i, 1).z > 0.5) continue;
+          float w0 = info(i, 0).w;
+          if (uGEN > 1) for (int g = 0; g < uGEN; g++) {
+            vec4 q = gen(i, g, p); float w = ampOf(q.r, q.g, w0);
+            acc += w * (g == 0 ? waveCol(i, p, q.r, q.g) : lut(i, 11 + g)); ws += w;
+          } else { float w = ampOf(tu[i], tup[i], w0); acc += w * waveCol(i, p, tu[i], tup[i]); ws += w; }
+        }
+        if (ws > 0.) calm = acc / ws;
+      }
+      c = mixc(uDeep, mixc(calm, uTurb, r), b);
+    } else {
+      float r = min(1., sqrt(R / uGR));
+      vec3 hot = uTurb;
+      if (uCW) {
+        for (int i = 0; i < uNL; i++) {
+          if (info(i, 1).z > 0.5) continue;
+          float w0 = info(i, 0).w, Ai = ampOf(tu[i], tup[i], w0), q = 0.;
+          int gi = int(info(i, 1).y);
+          for (int j = 0; j < uNL; j++) if (j != i && info(j, 1).z < 0.5) q += ampOf(tu[j], tup[j], info(j, 0).w) * clashG(gi, int(info(j, 1).y));
+          float wt = Ai * q;
+          if (uGEN > 1) {
+            float tot = 0.; float parts[4];
+            for (int g = 0; g < uGEN; g++) { vec4 qq = gen(i, g, p); parts[g] = ampOf(qq.r, qq.g, w0); tot += parts[g]; }
+            for (int g = 0; g < uGEN; g++) {
+              if (tot <= 0.) break;
+              vec4 qq = gen(i, g, p); float w = wt * parts[g] / tot;
+              acc += w * (g == 0 ? waveCol(i, p, qq.r, qq.g) : lut(i, 11 + g)); ws += w;
+            }
+          } else { acc += wt * waveCol(i, p, tu[i], tup[i]); ws += wt; }
+        }
+        if (ws > 0.) hot = acc / ws;
+      }
+      c = mixc(uDeep, hot, r);
+    }
+    o = vec4(c, 1.);
+  }`;
+
+  // the numbers the picture's brightness is scaled against, on a coarse grid of the map
+  const FS_METRIC = HEAD + READ + `
+  uniform ivec2 uGrid;
+  void main() {
+    ivec2 p = ivec2((vec2(gl_FragCoord.xy) - 0.5) * vec2(uSize) / vec2(uGrid));
+    if (wallAt(p)) { o = vec4(0.); return; }
+    readCell(p);
+    o = vec4(abs(V), S, R, 0.);
+  }`;
+
+  // strengths at chosen cells, read back for the probe, the sound and the leaves: one row per layer, then per note group
+  const FS_SAMPLE = HEAD + READ + `
+  uniform sampler2D uPts;
+  void main() {
+    int col = int(gl_FragCoord.x), row = int(gl_FragCoord.y);
+    ivec2 p = ivec2(texelFetch(uPts, ivec2(col, 0), 0).xy);
+    if (!inside(p) || wallAt(p)) { o = vec4(0.); return; }
+    readCell(p);
+    if (row < uNL) o = vec4(ampOf(tu[row], tup[row], info(row, 0).w), tu[row], 0., 0.);
+    else o = vec4(A[row - uNL], 0., 0., 0.);
+  }`;
+
+  function compile(type, src) {
+    const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+    return s;
+  }
+  function program(fs) {
+    const p = gl.createProgram();
+    gl.attachShader(p, compile(gl.VERTEX_SHADER, VS)); gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+    const u = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) { const a = gl.getActiveUniform(p, i); u[a.name.replace(/\[0\]$/, '')] = gl.getUniformLocation(p, a.name); }
+    return { p, u: new Proxy(u, { get: (o, k) => o[k] ?? null }) };
+  }
+  let P_STEP, P_GHOST, P_VIEW, P_METRIC, P_SAMPLE, fbo, S0, S1, wallTex, infoTex, lutTex, clashTex, ptsTex, metricTex, sampleTex;
+  function texParams(target) {
+    gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  }
+  function tex2D(fmt, w, h) { const x = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, x); gl.texStorage2D(gl.TEXTURE_2D, 1, fmt, w, h); texParams(gl.TEXTURE_2D); return x; }
+  function texArray(depth) { const x = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D_ARRAY, x); gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RGBA32F, W, H, depth); texParams(gl.TEXTURE_2D_ARRAY); return x; }
+  function initGPU() {
+    P_STEP = program(FS_STEP); P_GHOST = program(FS_GHOST); P_VIEW = program(FS_VIEW); P_METRIC = program(FS_METRIC); P_SAMPLE = program(FS_SAMPLE);
+    gl.bindVertexArray(gl.createVertexArray());
+    fbo = gl.createFramebuffer();
+    infoTex = tex2D(gl.RGBA32F, MAXL, 2); lutTex = tex2D(gl.RGBA32F, 15, MAXL); clashTex = tex2D(gl.R32F, MAXL, MAXL);
+    ptsTex = tex2D(gl.RG32F, MAXPTS, 1); metricTex = tex2D(gl.RGBA32F, MW, MH); sampleTex = tex2D(gl.RGBA32F, MAXPTS, 2 * MAXL);
+    allocField();
+  }
+  // the water and walls at the current grid size; the water starts flat
+  function allocField() {
+    for (const x of [S0, S1, wallTex]) if (x) gl.deleteTexture(x);
+    S0 = texArray(MAXL * GEN); S1 = texArray(MAXL * GEN); wallTex = tex2D(gl.R8, W, H);
+    glcv.width = W; glcv.height = H;
+    for (let sl = 0; sl < MAXL * GEN; sl++) { clearSlice(S0, sl); clearSlice(S1, sl); }
+    uploadWalls();
+  }
+  function target(texture, slice) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    if (slice === undefined) gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+    else gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, texture, 0, slice);
+  }
+  function clearSlice(texture, slice) { target(texture, slice); gl.clearBufferfv(gl.COLOR, 0, [0, 0, 0, 0]); }
+  function clearSlot(slot) { for (let g = 0; g < GEN; g++) { clearSlice(S0, slot * GEN + g); clearSlice(S1, slot * GEN + g); } }
+  function uploadWalls() {
+    const d = new Uint8Array(N); for (let i = 0; i < N; i++) d[i] = wall[i] ? 255 : 0;
+    gl.bindTexture(gl.TEXTURE_2D, wallTex); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RED, gl.UNSIGNED_BYTE, d);
+  }
+  function bindTex(prog, name, unit, texture, kind = gl.TEXTURE_2D) {
+    gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(kind, texture); gl.uniform1i(prog.u[name], unit);
   }
 
-  // every post and every note of every leaf gets its own layer, so each can be heard and tuned on its own
-  const newLayer = (key, s, src) => withFree({ key, s, src, fPrev: 0, omega: 2 * Math.PI * (WAVE_C / lambda(s)), u: new Float32Array(N), up: new Float32Array(N), un: new Float32Array(N), e: new Float32Array(N) });
-  // give a layer its free-space twin and the strength records for its direct and bounced waves
-  function withFree(L) {
-    if (echoes && !L.fu) { L.fu = new Float32Array(N); L.fup = new Float32Array(N); L.fun = new Float32Array(N); L.eDir = new Float32Array(N); L.eEcho = new Float32Array(N); }
-    return L;
-  }
+  // the walls changed: tell the GPU and repaint the overlay
+  function rebuild() { if (GPU_OK) uploadWalls(); paintWalls(); }
+
+  // every post and every note of every leaf gets its own slot, so each can be heard and tuned on its own
   function syncLayers() {
     const want = new Map();
     for (const p of posts) want.set('p' + p.id, [p.s, p]);
     for (const l of leaves) for (const s of l.chord) want.set('l' + l.id + ':' + s, [s, l]);
-    for (const k of [...layers.keys()]) if (!want.has(k)) layers.delete(k);
-    for (const [k, [s, src]] of want) { if (!layers.has(k)) layers.set(k, newLayer(k, s, src)); else layers.get(k).src = src; }
+    for (const [k, L] of [...layers]) if (!want.has(k)) { if (GPU_OK) clearSlot(L.slot); layers.delete(k); }
+    const used = new Set([...layers.values()].map(L => L.slot));
+    for (const [k, [s, src]] of want) {
+      if (layers.has(k)) { layers.get(k).src = src; continue; }
+      let slot = 0; while (used.has(slot)) slot++;
+      if (slot >= MAXL) continue;                    // no room left; placing refuses before it gets here
+      used.add(slot); if (GPU_OK) clearSlot(slot);
+      layers.set(k, { key: k, s, src, slot, fPrev: 0, phase: 0, omega: 2 * Math.PI * (WAVE_C / lambda(s)) });
+    }
     if (sel && !posts.includes(sel) && !leaves.includes(sel)) { sel = null; renderTune(); }
-    const used = new Set([...want.values()].map(v => v[0]));
-    for (const s of [...notes.keys()]) if (!used.has(s)) notes.delete(s);
-    for (const s of used) if (!notes.has(s)) notes.set(s, { s, e: new Float32Array(N) });
   }
+  const layersNeeded = () => posts.length + leaves.reduce((n, l) => n + l.chord.length, 0);
+  // the distinct pitches in the water, low to high: the note groups the picture and the clash table use
+  const pitchesInPlay = () => [...new Set([...layers.values()].map(L => L.s))].sort((a, b) => a - b);
 
   function resetWaves() {
-    for (const L of layers.values()) { L.u.fill(0); L.up.fill(0); L.un.fill(0); L.e.fill(0); if (L.fu) { L.fu.fill(0); L.fup.fill(0); L.fun.fill(0); L.eDir.fill(0); L.eEcho.fill(0); } }
-    for (const n of notes.values()) n.e.fill(0);
+    if (GPU_OK) for (let sl = 0; sl < MAXL * GEN; sl++) { clearSlice(S0, sl); clearSlice(S1, sl); }
+    for (const L of layers.values()) { L.fPrev = 0; }
     for (const p of posts) p.env = 0;
     for (const l of leaves) { l.env = 0; l.trail = []; }
-    for (const L of layers.values()) L.fPrev = 0;
   }
 
   // ---------- the wave step ----------
-  const leafCell = l => Math.round(l.y) * W + Math.round(l.x);
+  const leafCell = l => [Math.round(l.x), Math.round(l.y)];
+  const PHASE_WRAP = 2 * Math.PI * 27720;   // whole cycles of every cycle length 1 to 12, so wrapping never shifts a wave colour
   function step() {
     // Each source fades its song in and out rather than switching it, so muting or unmuting never kicks the water.
     for (const src of [...posts, ...leaves]) {
-      const target = src.muted ? 0 : 1, env = src.env || 0;
-      src.env = Math.abs(target - env) < 1 / RAMP ? target : env + Math.sign(target - env) / RAMP;
+      const goal = src.muted ? 0 : 1, env = src.env || 0;
+      src.env = Math.abs(goal - env) < 1 / RAMP ? goal : env + Math.sign(goal - env) / RAMP;
       // strength glides to a new setting too, so a slider move never cracks the water like a whip
       const want = src.snd ? src.snd.vol : 1;
       src.volNow = src.volNow === undefined ? want : src.volNow + (want - src.volNow) / 40;
     }
+    if (!GPU_OK) { t++; return; }
+    gl.viewport(0, 0, W, H);
+    gl.useProgram(P_STEP.p);
+    bindTex(P_STEP, 'uS', 0, S0, gl.TEXTURE_2D_ARRAY); bindTex(P_STEP, 'uWall', 1, wallTex);
+    gl.uniform2i(P_STEP.u.uSize, W, H); gl.uniform1i(P_STEP.u.uSponge, SPONGE); gl.uniform1i(P_STEP.u.uOpen, edgeOpen ? 1 : 0);
+    gl.uniform1f(P_STEP.u.uSmax, SMAX); gl.uniform1f(P_STEP.u.uC2, C2);
     for (const L of layers.values()) {
-      const u = L.u, up = L.up, un = L.un, e = L.e;
-      // air takes highs far faster than lows: loss grows with the square of the frequency, set relative to A4
-      const airL = air * Math.pow(freqHz(L.s) / 440, 2) / gridK;   // per step; waves take k steps per base cell
-      for (let k = 0; k < live.length; k++) {
-        const i = live[k], s = sigma[i] + airL;
-        const lap = u[nL[i]] + u[nR[i]] + u[nU[i]] + u[nD[i]] - 4 * u[i];
-        un[i] = (2 * u[i] - (1 - s) * up[i] + C2 * lap) / (1 + s);
-      }
-      // A source pushes the water by the step-to-step change of a bounded tone, never by the tone itself, so over
-      // time it adds no net water. Driving with the tone directly left a little extra every cycle, and in a walled-off
-      // area with nowhere to drain it the whole region slowly rose or sank: a silent offset that looked and sounded
-      // like the note was everywhere. Same loudness as before.
-      L.phase = (L.phase || 0) + L.omega;   // a running phase, so a pitch change glides instead of jumping
-      // strength, the fade envelope and the 1/omega loudness scaling all live inside f, so changing any of them
-      // mid-song still adds no net water
-      // In flat water a low note's waves come out much bigger than a high note's from the same push (spreading in
-      // 2D favours long waves by the square root of the wavelength). Scaling the push by sqrt(omega) evens that out,
-      // so equal Strength means equal wave height at the same distance, whatever the note.
-      const src = L.src, f = (src.env || 0) * (src.volNow === undefined ? 1 : src.volNow) * Math.sqrt(L.omega / OMEGA_REF) * Math.cos(L.phase) / L.omega;
-      const at = src.chord ? leafCell(src) : src.y * W + src.x, push = AMP * (L.fPrev - f);
-      un[at] += push;
-      L.fPrev = f;
-      L.up = u; L.u = un; L.un = up;
-      const nu = L.u;
-      for (let k = 0; k < live.length; k++) { const i = live[k]; e[i] += (nu[i] * nu[i] - e[i]) * EMA; }
-      if (echoes && L.fu) {
-        const fu = L.fu, fup = L.fup, fun = L.fun;
-        for (let i = 0; i < N; i++) {
-          const sF = sigmaF[i] + airL, lap = fu[fL[i]] + fu[fR[i]] + fu[fU[i]] + fu[fD[i]] - 4 * fu[i];
-          fun[i] = (2 * fu[i] - (1 - sF) * fup[i] + C2 * lap) / (1 + sF);
-        }
-        fun[at] += push;
-        L.fup = fu; L.fu = fun; L.fun = fup;
-        const nf = L.fu, ed = L.eDir, ee = L.eEcho;
-        for (let k = 0; k < live.length; k++) { const i = live[k], dv = nf[i], ev = nu[i] - dv; ed[i] += (dv * dv - ed[i]) * EMA; ee[i] += (ev * ev - ee[i]) * EMA; }
+      // A source pushes the water by the step-to-step change of a bounded tone, never by the tone itself, so it adds no
+      // net water. Strength, the fade envelope and the loudness scaling all live inside f, so changing any of them
+      // mid-song still adds none. In flat water a low note's waves come out bigger than a high note's from the same
+      // push; scaling by sqrt(omega) evens that out, so equal Strength means equal wave height whatever the note.
+      L.phase += L.omega; if (L.phase > PHASE_WRAP) L.phase -= PHASE_WRAP;
+      const src = L.src;
+      const f = (src.env || 0) * (src.volNow === undefined ? 1 : src.volNow) * Math.sqrt(L.omega / OMEGA_REF) * Math.cos(L.phase) / L.omega;
+      const push = AMP * (L.fPrev - f); L.fPrev = f;
+      const [sx, sy] = src.chord ? leafCell(src) : [src.x, src.y];
+      gl.uniform1f(P_STEP.u.uAir, air * Math.pow(freqHz(L.s) / 440, 2) / gridK);   // highs fade faster; per step, per base cell
+      for (let g = 0; g < GEN; g++) {
+        target(S1, L.slot * GEN + g);
+        gl.uniform1i(P_STEP.u.uSlice, L.slot * GEN + g);
+        gl.uniform1i(P_STEP.u.uPrev, g > 0 ? L.slot * GEN + g - 1 : -1);
+        gl.uniform1i(P_STEP.u.uMur, g < GEN - 1 ? 1 : 0);
+        gl.uniform2i(P_STEP.u.uSrc, g === 0 ? sx : -1, g === 0 ? sy : -1);
+        gl.uniform1f(P_STEP.u.uPush, push);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
       }
     }
-    // the combined strength of each note, all its sources added together as real waves
-    const groups = new Map();
-    for (const L of layers.values()) { if (!groups.has(L.s)) groups.set(L.s, []); groups.get(L.s).push(L.u); }
-    for (const [s, us] of groups) {
-      const e = notes.get(s).e;
-      for (let k = 0; k < live.length; k++) {
-        const i = live[k]; let v = 0; for (const u of us) v += u[i];
-        e[i] += (v * v - e[i]) * EMA;
+    if (GEN > 1) {
+      gl.useProgram(P_GHOST.p);
+      bindTex(P_GHOST, 'uS', 0, S1, gl.TEXTURE_2D_ARRAY); bindTex(P_GHOST, 'uWall', 1, wallTex);
+      gl.uniform2i(P_GHOST.u.uSize, W, H); gl.uniform1f(P_GHOST.u.uK, (WAVE_C - 1) / (WAVE_C + 1));
+      for (const L of layers.values()) for (let g = 0; g < GEN; g++) {
+        target(S0, L.slot * GEN + g);
+        gl.uniform1i(P_GHOST.u.uSlice, L.slot * GEN + g); gl.uniform1i(P_GHOST.u.uMur, g < GEN - 1 ? 1 : 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
       }
-    }
-    if (!warming) for (const l of leaves) moveLeaf(l);   // leaves stay put while the tank first fills
+    } else { const x = S0; S0 = S1; S1 = x; }
     t++;
   }
 
+  // ---------- what the CPU tells the GPU about the layers each frame ----------
+  let order = [];   // layers in the order the GPU sees them this frame
+  function uploadInfo() {
+    order = [...layers.values()];
+    const groups = pitchesInPlay(), gi = s => groups.indexOf(s);
+    const info = new Float32Array(MAXL * 2 * 4), lutD = new Float32Array(15 * MAXL * 4), cl = new Float32Array(MAXL * MAXL);
+    order.forEach((L, i) => {
+      const src = L.src, look = lookOf(src);
+      info.set([src.x, src.y, L.phase, L.omega], i * 4);
+      info.set([L.slot, gi(L.s), src.muted ? 1 : 0, look.len], (MAXL + i) * 4);
+      for (let k = 0; k < 12; k++) lutD.set([...look.rgb[k].map(v => v / 255), 1], (i * 15 + k) * 4);
+      for (let k = 0; k < 3; k++) lutD.set([...look.echoRgb[k].map(v => v / 255), 1], (i * 15 + 12 + k) * 4);
+    });
+    groups.forEach((a, x) => groups.forEach((b, y) => { cl[y * MAXL + x] = x === y ? 0 : clashOf(a, b); }));
+    gl.bindTexture(gl.TEXTURE_2D, infoTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAXL, 2, gl.RGBA, gl.FLOAT, info);
+    gl.bindTexture(gl.TEXTURE_2D, lutTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 15, MAXL, gl.RGBA, gl.FLOAT, lutD);
+    gl.bindTexture(gl.TEXTURE_2D, clashTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAXL, MAXL, gl.RED, gl.FLOAT, cl);
+    return groups;
+  }
+  function bindRead(prog) {
+    bindTex(prog, 'uS', 0, S0, gl.TEXTURE_2D_ARRAY); bindTex(prog, 'uWall', 1, wallTex); bindTex(prog, 'uInfo', 2, infoTex);
+    bindTex(prog, 'uLut', 3, lutTex); bindTex(prog, 'uClash', 4, clashTex);
+    gl.uniform2i(prog.u.uSize, W, H); gl.uniform1i(prog.u.uNL, order.length); gl.uniform1i(prog.u.uGEN, GEN);
+  }
+
+  // ---------- reading the water back: brightness scaling, the probe, the sound and the leaves ----------
+  let samples = null;    // { pts, amp[layerIndex][pt], group[g][pt], groups }
+  function readBack(groups) {
+    // the brightness scale, from a coarse grid of the map
+    gl.useProgram(P_METRIC.p); bindRead(P_METRIC); gl.uniform1i(P_METRIC.u.uNG, groups.length); gl.uniform2i(P_METRIC.u.uGrid, MW, MH);
+    target(metricTex); gl.viewport(0, 0, MW, MH); gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const m = new Float32Array(MW * MH * 4); gl.readPixels(0, 0, MW, MH, gl.RGBA, gl.FLOAT, m);
+    let mV = 0, mS = 0, mR = 0;
+    for (let i = 0; i < MW * MH; i++) { mV = Math.max(mV, m[i * 4]); mS = Math.max(mS, m[i * 4 + 1]); mR = Math.max(mR, m[i * 4 + 2]); }
+    // auto gain: rises instantly, falls slowly, never past a floor, so quiet water looks quiet
+    gWater = Math.max(mV, gWater * 0.985, GAIN_FLOOR); gColour = Math.max(mV, gColour * 0.985, GAIN_FLOOR);
+    gS = Math.max(mS, gS * 0.985, GAIN_FLOOR); gR = Math.max(mR, gR * 0.985, GAIN_FLOOR * GAIN_FLOOR);
+    // the cells we need numbers for: the hovered one, then five around each leaf
+    const pts = [hover >= 0 ? [hover % W, (hover / W) | 0] : [-1, -1]];
+    for (const l of leaves) { const [cx, cy] = leafCell(l), r = LEAF_R; pts.push([cx, cy], [cx + r, cy], [cx - r, cy], [cx, cy + r], [cx, cy - r]); }
+    const np = Math.min(MAXPTS, pts.length), rows = order.length + groups.length;
+    if (!rows) { samples = { pts, amp: [], group: [], groups }; return; }
+    const pd = new Float32Array(MAXPTS * 2); pts.slice(0, np).forEach((q, j) => { pd[j * 2] = q[0]; pd[j * 2 + 1] = q[1]; });
+    gl.bindTexture(gl.TEXTURE_2D, ptsTex); gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, MAXPTS, 1, gl.RG, gl.FLOAT, pd);
+    gl.useProgram(P_SAMPLE.p); bindRead(P_SAMPLE); gl.uniform1i(P_SAMPLE.u.uNG, groups.length); bindTex(P_SAMPLE, 'uPts', 5, ptsTex);
+    target(sampleTex); gl.viewport(0, 0, np, rows); gl.drawArrays(gl.TRIANGLES, 0, 3);
+    const d = new Float32Array(np * rows * 4); gl.readPixels(0, 0, np, rows, gl.RGBA, gl.FLOAT, d);
+    const amp = order.map((_, i) => Array.from({ length: np }, (_, j) => d[(i * np + j) * 4]));
+    const group = groups.map((_, g) => Array.from({ length: np }, (_, j) => d[((order.length + g) * np + j) * 4]));
+    samples = { pts, amp, group, groups };
+  }
+
   // ---------- leaves ----------
-  // How well the water at a cell suits a leaf's chord, from everyone's song but its own:
-  // the leaf's own notes there count for it, every other note counts against it by how hard it clashes with the chord.
-  function suitability(l, i) {
-    if (i < 0 || wall[i]) return null;
+  // How well the water at a cell suits a leaf's chord, from everyone's song but its own: the leaf's own notes there
+  // count for it, every other note counts against it by how hard it clashes with the chord.
+  function suitability(l, j) {
+    const [x, y] = samples.pts[j];
+    if (x < 0 || y < 0 || x >= W || y >= H || wall[y * W + x]) return null;
     const amp = new Map();
-    for (const L of layers.values()) if (L.src !== l) amp.set(L.s, (amp.get(L.s) || 0) + 2 * L.e[i]);
+    order.forEach((L, i) => { if (L.src !== l) { const a = samples.amp[i][j]; amp.set(L.s, (amp.get(L.s) || 0) + a * a); } });
     let q = 0;
-    for (const [s, e2] of amp) {
-      const A = Math.sqrt(e2);
+    for (const [s, a2] of amp) {
+      const A = Math.sqrt(a2);
       if (l.chord.includes(s)) q += A;
       else { let d = 0; for (const c of l.chord) d += clashOf(s, c); q -= A * d / l.chord.length; }
     }
@@ -560,52 +854,41 @@ details[open] { display: grid; gap: 8px; }
   }
   const cellOf = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? -1 : y * W + x;
   // The current runs uphill on suitability, faster where the slope is steeper, never faster than the waves.
-  // The leaf moves at half of it. Walls are solid: it slides along them rather than through.
-  function moveLeaf(l) {
-    const cx = Math.round(l.x), cy = Math.round(l.y), r = LEAF_R;
-    const qc = suitability(l, cellOf(cx, cy)); if (qc === null) return;
-    const slope = (a, b) => (a !== null && b !== null) ? (a - b) / (2 * r) : a !== null ? (a - qc) / r : b !== null ? (qc - b) / r : 0;
-    const gx = slope(suitability(l, cellOf(cx + r, cy)), suitability(l, cellOf(cx - r, cy)));
-    const gy = slope(suitability(l, cellOf(cx, cy + r)), suitability(l, cellOf(cx, cy - r)));
-    const g = Math.hypot(gx, gy); if (g < 1e-12) return;
-    const current = Math.min(WAVE_C, kappa * g);
-    const v = 0.5 * current, dx = v * gx / g, dy = v * gy / g;
-    const free = (x, y) => { const i = cellOf(Math.round(x), Math.round(y)); return i >= 0 && !wall[i]; };
-    if (free(l.x + dx, l.y + dy)) { l.x += dx; l.y += dy; }
-    else if (free(l.x + dx, l.y)) l.x += dx;
-    else if (free(l.x, l.y + dy)) l.y += dy;
-    if (t % 8 === 0) { l.trail.push([l.x, l.y]); if (l.trail.length > 800) l.trail.shift(); }
-  }
-
-  // ---------- reading a cell ----------
-  // per note strength, total strength, roughness (pairwise clash weighted by both strengths)
-  const Ns = () => [...notes.values()];
-  // clash is the strength-weighted average clash over every pair of notes present, so a full chord isn't
-  // scored as rougher than a lone pair just because it has more pairs; a single note is perfectly calm
-  function cellRead(i, arr) {
-    let E = 0, R = 0, P = 0;
-    for (let a = 0; a < arr.length; a++) {
-      const A = Math.sqrt(2 * arr[a].e[i]); E += A * A;
-      for (let b = a + 1; b < arr.length; b++) { const w = A * Math.sqrt(2 * arr[b].e[i]); P += w; R += w * clashOf(arr[a].s, arr[b].s); }
-    }
-    return { E, R, clash: P > 1e-12 ? R / P : 0 };
+  // The leaf moves at half of it for each step that ran this frame. Walls are solid: it slides along them.
+  function moveLeaves(steps) {
+    if (!samples || !steps) return;
+    leaves.forEach((l, k) => {
+      const base = 1 + k * 5; if (base + 4 >= samples.pts.length || base + 4 >= MAXPTS) return;
+      const qc = suitability(l, base); if (qc === null) return;
+      const r = LEAF_R;
+      const slope = (a, b) => (a !== null && b !== null) ? (a - b) / (2 * r) : a !== null ? (a - qc) / r : b !== null ? (qc - b) / r : 0;
+      const gx = slope(suitability(l, base + 1), suitability(l, base + 2));
+      const gy = slope(suitability(l, base + 3), suitability(l, base + 4));
+      const g = Math.hypot(gx, gy); if (g < 1e-12) return;
+      const v = 0.5 * Math.min(WAVE_C, kappa * g) * steps;
+      const free = (x, y) => { const i = cellOf(Math.round(x), Math.round(y)); return i >= 0 && !wall[i]; };
+      // move in single-cell-or-less hops so a fast leaf never jumps a wall
+      const hops = Math.max(1, Math.ceil(v)), dx = v * gx / g / hops, dy = v * gy / g / hops;
+      for (let h = 0; h < hops; h++) {
+        if (free(l.x + dx, l.y + dy)) { l.x += dx; l.y += dy; }
+        else if (free(l.x + dx, l.y)) l.x += dx;
+        else if (free(l.x, l.y + dy)) l.y += dy;
+      }
+      if (t % 8 < steps) { l.trail.push([l.x, l.y]); if (l.trail.length > 800) l.trail.shift(); }
+    });
   }
 
   // ---------- drawing ----------
-  const view$ = document.getElementById('view');
-  const ctx = view$.getContext('2d');
-  const off = document.createElement('canvas'); off.width = W; off.height = H;
-  const octx = off.getContext('2d'); let img = octx.createImageData(W, H);
-  // walls are painted once into their own picture whenever they change, not cell by cell every frame
+  // walls are painted once into their own picture whenever they change, then laid over the water
   const wallCv = document.createElement('canvas'); wallCv.width = W; wallCv.height = H;
   const wctx = wallCv.getContext('2d');
   function paintWalls() {
-    if (wallCv.width !== W) { wallCv.width = W; wallCv.height = H; }
+    if (wallCv.width !== W || wallCv.height !== H) { wallCv.width = W; wallCv.height = H; }
     const im = wctx.createImageData(W, H), d = im.data, c = hex2rgb(css.getPropertyValue('--stone').trim());
     for (let i = 0; i < N; i++) if (wall[i]) { d[i * 4] = c[0]; d[i * 4 + 1] = c[1]; d[i * 4 + 2] = c[2]; d[i * 4 + 3] = 255; }
     wctx.putImageData(im, 0, 0);
   }
-  function resizeCanvases() { off.width = W; off.height = H; img = octx.createImageData(W, H); wallCv.width = W; wallCv.height = H; size(); }
+  function resizeCanvases() { if (GPU_OK) allocField(); wallCv.width = W; wallCv.height = H; size(); }
 
   // Switch grid fineness, keeping the map: walls are resampled cell for cell, posts and leaves keep their places.
   // The water restarts, since its waves were laid out for the old grid.
@@ -617,8 +900,10 @@ details[open] { display: grid; gap: 8px; }
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) wall[y * W + x] = oldWall[Math.floor(y / f) * oldW + Math.floor(x / f)];
     for (const p of posts) { p.x = Math.min(W - 1, Math.round(p.x * f)); p.y = Math.min(H - 1, Math.round(p.y * f)); wall[p.y * W + p.x] = 0; p.s = Math.min(p.s, maxPitch()); }
     for (const l of leaves) { l.x = Math.min(W - 1, l.x * f); l.y = Math.min(H - 1, l.y * f); l.trail = []; l.chord = l.chord.map(n => Math.min(n, maxPitch())); }
-    layers = new Map(); notes = new Map(); hoverPost = null;
-    resizeCanvases(); rebuild(); changed(); renderNotes(); renderTune(); renderGrid();
+    hoverPost = null;
+    layers = new Map();
+    resizeCanvases(); rebuild(); resetWaves();
+    changed(); renderNotes(); renderTune(); renderGrid();
     gWater = gS = gColour = GAIN_FLOOR; gR = GAIN_FLOOR * GAIN_FLOOR;
     try { localStorage.setItem('fds-grid', String(k)); } catch (e) {}
   }
@@ -626,6 +911,7 @@ details[open] { display: grid; gap: 8px; }
     const g = document.getElementById('grid'); if (g) g.value = String(gridK);
     const v = document.getElementById('gridv'); if (v) v.textContent = 'up to ' + label(maxPitch());
   }
+
   const GAIN_FLOOR = 0.05;
   let gWater = GAIN_FLOOR, gS = GAIN_FLOOR, gR = GAIN_FLOOR * GAIN_FLOOR, gColour = GAIN_FLOOR, cell = 4;
 
@@ -634,122 +920,28 @@ details[open] { display: grid; gap: 8px; }
     const dpr = window.devicePixelRatio || 1;
     cell = box.width / W;
     view$.width = Math.round(box.width * dpr); view$.height = Math.round(box.width * H / W * dpr);
-    view$.style.height = (box.width * H / W) + 'px';
+    view$.style.height = (box.width * H / W) + 'px'; glcv.style.height = (box.width * H / W) + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
   const mix = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
   const rgb = c => `rgb(${c.map(Math.round)})`;
-
-  // the colour of the wave of this layer passing through a cell right now, from its source's colour cycle
-  function waveColour(L, i, U = L.u, UP = L.up) {
-    const x = i % W, y = (i / W) | 0, src = L.src, u = U[i];
-    const geo = (L.phase || 0) - (L.omega / WAVE_C) * Math.hypot(x - src.x, y - src.y);
-    const psi = Math.atan2(u, (u - UP[i]) / L.omega);
-    let d = (psi - geo) % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI;
-    const n = Math.round((geo + d - Math.PI / 2) / (2 * Math.PI));
-    const look = lookOf(src); return look.rgb[((n % look.len) + look.len) % look.len];
-  }
-  // a weighted blend of the wave colours in a cell; falls back to the view's own colour where nothing is there
-  // With echoes coloured, each layer counts as two parts: part 0 the waves straight from the source (in their wave
-  // colours), part 1 the waves that have bounced (in the source's echo colour). Otherwise part 0 is the whole layer.
-  const split = L => echoes && L.fu;
-  function blendWaves(i, weight, fallback) {
-    let r = 0, g = 0, b = 0, ws = 0;
-    for (const L of layers.values()) {
-      if (L.src.muted) continue;
-      const w0 = weight(L, 0);
-      if (w0 > 0) { const col = split(L) ? waveColour(L, i, L.fu, L.fup) : waveColour(L, i); r += w0 * col[0]; g += w0 * col[1]; b += w0 * col[2]; ws += w0; }
-      if (split(L)) { const w1 = weight(L, 1); if (w1 > 0) { const col = lookOf(L.src).echoRgb; r += w1 * col[0]; g += w1 * col[1]; b += w1 * col[2]; ws += w1; } }
-    }
-    return ws > 0 ? [r / ws, g / ws, b / ws] : fallback;
-  }
   let colourWaves = false;
   try { colourWaves = localStorage.getItem('fds-colour-waves') === '1'; } catch (e) {}
+  const VIEW_ID = { water: 0, harm: 1, turb: 2, colour: 3 };
 
-  function draw() {
-    const arr = Ns(), px = img.data;
-    let mW = 0, mS = 0, mR = 0, mC = 0;
-    for (let i = 0; i < N; i++) {
-      let c;
-      if (wall[i]) c = COL.bg;
-      else if (view === 'colour') {
-        // The real water, coloured. Brightness comes from all the waves added together, so where a crest meets a
-        // trough they cancel and the water goes dark, exactly as in the Water view. The colour comes from the
-        // sources pushing the water the way it's actually going in this cell, each in its own wave colour.
-        // Which wave a crest is comes from how far it has travelled from its source, snapped to the real crest
-        // using the wave's own phase here; echoes take the colour of the wave due at that distance.
-        const x = i % W, y = (i / W) | 0;
-        let v = 0; for (const L of layers.values()) v += L.u[i];
-        mC = Math.max(mC, Math.abs(v));
-        const kk = Math.max(-1, Math.min(1, v / gColour)), sign = v >= 0 ? 1 : -1;
-        let wr = 0, wg = 0, wb = 0, ws = 0;
-        if (Math.abs(kk) > 0.02) for (const L of layers.values()) {
-          const src = L.src; if (src.muted) continue;
-          if (split(L)) {
-            const dir = L.fu[i], ech = L.u[i] - dir;
-            if (dir * sign > 0) { const col = waveColour(L, i, L.fu, L.fup), w = dir * sign; wr += w * col[0]; wg += w * col[1]; wb += w * col[2]; ws += w; }
-            if (ech * sign > 0) { const col = lookOf(src).echoRgb, w = ech * sign; wr += w * col[0]; wg += w * col[1]; wb += w * col[2]; ws += w; }
-            continue;
-          }
-          const u = L.u[i], wgt = u * sign; if (wgt <= 0) continue;
-          const col = waveColour(L, i);
-          wr += wgt * col[0]; wg += wgt * col[1]; wb += wgt * col[2]; ws += wgt;
-        }
-        if (kk > 0 && ws > 0) c = mix(COL.deep, [wr / ws, wg / ws, wb / ws], kk);
-        else if (kk < 0) c = COL.deep.map(ch => ch * (1 + 0.75 * kk));
-        else c = COL.deep;
-      }
-      else if (view === 'water') {
-        let v = 0; for (const L of layers.values()) v += L.u[i];
-        mW = Math.max(mW, Math.abs(v));
-        const k = Math.max(-1, Math.min(1, v / gWater));
-        // with wave colours on, the crest colour is the blend of the waves in this cell, weighted by how hard each is moving it
-        let top = COL.crest;
-        if (colourWaves) {
-          top = blendWaves(i, (L, part) => split(L) ? Math.abs(part ? L.u[i] - L.fu[i] : L.fu[i]) : Math.abs(L.u[i]), COL.crest);
-          // Only colour as much water as is really there. Behind a wall the wall-less twin's waves and their echo
-          // cancel exactly, so the parts are big but the water is flat; without this their colours showed through
-          // as a ghost ring that seemed to pass straight through the wall.
-          let parts = 0;
-          for (const L of layers.values()) parts += split(L) ? Math.abs(L.fu[i]) + Math.abs(L.u[i] - L.fu[i]) : Math.abs(L.u[i]);
-          top = mix(COL.crest, top, parts > 1e-9 ? Math.min(1, Math.abs(v) / parts) : 0);
-        }
-        c = mix(COL.deep, top, 0.5 + 0.5 * k);
-      } else {
-        const { E, R, clash } = cellRead(i, arr);
-        const S = Math.sqrt(E); mS = Math.max(mS, S); mR = Math.max(mR, R);
-        if (view === 'harm') {
-          const b = Math.min(1, Math.sqrt(S / gS));
-          const r = Math.min(1, clash * clash);   // squared, so consonant chords sit calm and only real clashes run hot
-          // with wave colours on, calm water takes the blend of the waves here, weighted by strength; clash still pulls it to turbulence
-          const calm = colourWaves ? blendWaves(i, (L, part) => Math.sqrt(2 * (split(L) ? (part ? L.eEcho[i] : L.eDir[i]) : L.e[i])), COL.calm) : COL.calm;
-          c = mix(COL.deep, mix(calm, COL.turb, r), b);
-        } else {
-          const r = Math.min(1, Math.sqrt(R / gR));
-          // with wave colours on, the churn takes the colours of the waves causing it, each weighted by how much clash it brings
-          const hot = colourWaves ? blendWaves(i, (L, part) => {
-            const A = Math.sqrt(2 * L.e[i]); let q = 0;
-            for (const O of layers.values()) if (O !== L && !O.src.muted) q += Math.sqrt(2 * O.e[i]) * clashOf(L.s, O.s);
-            if (!split(L)) return A * q;
-            const ad = Math.sqrt(2 * L.eDir[i]), ae = Math.sqrt(2 * L.eEcho[i]), tot = ad + ae;
-            return tot > 0 ? A * q * (part ? ae : ad) / tot : 0;   // the clash a layer brings, shared between its direct and bounced waves
-          }, COL.turb) : COL.turb;
-          c = mix(COL.deep, hot, r);
-        }
-      }
-      const o = i * 4; px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 255;
+  function draw(groups) {
+    if (GPU_OK) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H);
+      gl.useProgram(P_VIEW.p); bindRead(P_VIEW);
+      const u = P_VIEW.u, c3 = (name, c) => gl.uniform3f(u[name], c[0] / 255, c[1] / 255, c[2] / 255);
+      gl.uniform1i(u.uNG, groups.length); gl.uniform1i(u.uView, VIEW_ID[view]); gl.uniform1i(u.uCW, colourWaves ? 1 : 0);
+      gl.uniform1f(u.uGW, gWater); gl.uniform1f(u.uGS, gS); gl.uniform1f(u.uGR, gR); gl.uniform1f(u.uGC, gColour);
+      c3('uDeep', COL.deep); c3('uCrest', COL.crest); c3('uCalm', COL.calm); c3('uTurb', COL.turb); c3('uBg', COL.bg);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
-    // auto gain: rises instantly, falls slowly, so the picture stays readable as the tank fills. It never turns the
-    // contrast past a floor of about a twentieth of a post's own strength, so water that has gone quiet looks quiet
-    // instead of being stretched back up to full brightness.
-    if (view === 'water') gWater = Math.max(mW, gWater * 0.985, GAIN_FLOOR);
-    else if (view === 'colour') gColour = Math.max(mC, gColour * 0.985, GAIN_FLOOR);
-    else { gS = Math.max(mS, gS * 0.985, GAIN_FLOOR); gR = Math.max(mR, gR * 0.985, GAIN_FLOOR * GAIN_FLOOR); }
-    octx.putImageData(img, 0, 0);
-    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-    ctx.drawImage(off, 0, 0, cell * W, cell * H);
-    ctx.fillStyle = rgb(COL.stone);
+    // the overlay: walls, the straight run being drawn, posts and leaves
+    ctx.clearRect(0, 0, cell * W, cell * H);
     ctx.imageSmoothingEnabled = false; ctx.drawImage(wallCv, 0, 0, cell * W, cell * H); ctx.imageSmoothingEnabled = true;
     if (anchor && lockedEnd) {   // the straight run you're holding with Shift, not laid yet
       ctx.globalAlpha = 0.55;
@@ -782,6 +974,10 @@ details[open] { display: grid; gap: 8px; }
       ctx.font = font; ctx.fillStyle = rgb(COL.calm); ctx.textBaseline = 'bottom';
       ctx.fillText(l.chord.map(label).join(' '), cx + uc * 1.8, cy - uc * 0.8);
     }
+    if (!GPU_OK) {
+      ctx.fillStyle = rgb(COL.fg); ctx.font = '600 16px Hanken Grotesk, sans-serif'; ctx.textBaseline = 'top';
+      ctx.fillText('This simulator needs WebGL2 with floating-point render targets, which this browser does not offer.', 16, 16);
+    }
   }
 
   // ---------- probe ----------
@@ -789,12 +985,13 @@ details[open] { display: grid; gap: 8px; }
   const probe$ = document.getElementById('probe');
   const PROBE_IDLE = '<span class="empty">Hover the map to read a cell. Turn sound on to hear it.</span>';
   function drawProbe() {
-    if (hover < 0) return;
-    const arr = Ns();
+    if (hover < 0 || !samples) return;
     if (wall[hover]) { probe$.innerHTML = '<span class="empty">Wall.</span>'; return; }
-    const amps = arr.map(n => [n.s, Math.sqrt(2 * n.e[hover])]).sort((a, b) => a[0] - b[0]);
+    const groups = samples.groups, amps = groups.map((s, g) => [s, samples.group[g] ? samples.group[g][0] : 0]);
     const top = Math.max(1e-9, ...amps.map(a => a[1]));
-    const { E, clash: r } = cellRead(hover, arr);
+    let E = 0, R = 0, P = 0;
+    amps.forEach(([s, a], x) => { E += a * a; amps.forEach(([s2, b], y) => { if (y > x) { const w = a * b; P += w; R += w * clashOf(s, s2); } }); });
+    const r = P > 1e-12 ? R / P : 0;
     const verdict = E < 1e-8 ? 'still water' : r < 0.5 ? 'calm, constructive' : r < 0.7 ? 'tense' : 'turbulent';
     const x = hover % W, y = (hover / W) | 0;
     probe$.innerHTML =
@@ -831,7 +1028,7 @@ details[open] { display: grid; gap: 8px; }
   function updateSound() {
     if (!actx) return;
     const now = actx.currentTime, here = soundOn && hover >= 0 && !wall[hover];
-    const all = [...layers.values()];
+    const all = [...layers.values()], idx = new Map(order.map((L, i) => [L, i]));
     // Loudness follows the same square-root curve as the picture's brightness. Measured straight against the
     // loudest cell on the map (right on top of a post) almost everywhere else came out near silent.
     const share = 0.5 / Math.sqrt(Math.max(1, all.length));
@@ -839,7 +1036,7 @@ details[open] { display: grid; gap: 8px; }
       const v = voice(L), snd = L.src.snd;
       applySettings(v, snd, now);
       v.o.frequency.setTargetAtTime(freqHz(L.s), now, 0.02);
-      const A = here && !L.src.muted ? Math.sqrt(2 * L.e[hover]) : 0;
+      const A = here && !L.src.muted && samples && idx.has(L) && samples.amp[idx.get(L)] ? samples.amp[idx.get(L)][0] : 0;
       v.g.gain.setTargetAtTime(Math.min(1, Math.sqrt(A / gS)) * share, now, 0.06);   // strength is already in A
     }
     for (const [k, v] of voices) if (!layers.has(k)) { v.g.gain.setTargetAtTime(0, now, 0.03); v.o.stop(now + 0.2); voices.delete(k); }
@@ -922,7 +1119,7 @@ details[open] { display: grid; gap: 8px; }
       () => { leaves.splice(k, 1); changed(); }));
   }
   function renderMatrix() {
-    const ss = [...notes.keys()].sort((a, b) => a - b);
+    const ss = pitchesInPlay();
     const el = document.getElementById('mx');
     if (ss.length < 2) { el.innerHTML = '<span class="empty">Needs two different notes on the map.</span>'; return; }
     let h = '<table class="mx"><tr><th></th>' + ss.map(s => `<th>${label(s)}</th>`).join('') + '</tr>';
@@ -969,11 +1166,6 @@ details[open] { display: grid; gap: 8px; }
     const L = layers.get('p' + p.id);
     if (L) {
       L.s = s; L.omega = 2 * Math.PI * (WAVE_C / lambda(s));
-      // carry the combined-strength record over to the new pitch when nothing else is using the old one
-      const shared = [...layers.values()].some(o => o !== L && o.s === old);
-      if (!shared && notes.has(old) && !notes.has(s)) { const n = notes.get(old); notes.delete(old); n.s = s; notes.set(s, n); }
-      else if (!notes.has(s)) notes.set(s, { s, e: new Float32Array(N) });
-      if (!shared && notes.has(old)) notes.delete(old);
     }
     renderPosts(); renderMatrix(); renderNotes();
   }
@@ -1027,14 +1219,14 @@ details[open] { display: grid; gap: 8px; }
   function renderLook() {
     if (!sel) return;
     const L = lookOf(sel);
-    $('c-len').value = L.len; $('c-echo').value = L.echo;
+    $('c-len').value = L.len; L.echo.forEach((c, k) => { $('c-echo' + (k + 1)).value = c; });
     [...$('c-slots').children].forEach((b, k) => {
       b.style.background = L.slots[k]; b.className = k < L.len ? '' : 'off';
       b.setAttribute('aria-pressed', k === slotSel ? 'true' : 'false');
     });
   }
   $('c-pick').addEventListener('input', e => { if (!sel) return; lookOf(sel).slots[slotSel] = e.target.value; renderLook(); });
-  $('c-echo').addEventListener('input', e => { if (!sel) return; lookOf(sel).echo = e.target.value; });
+  [1, 2, 3].forEach(k => $('c-echo' + k).addEventListener('input', e => { if (!sel) return; lookOf(sel).echo[k - 1] = e.target.value; }));
   $('c-len').onchange = e => { if (!sel) return; lookOf(sel).len = +e.target.value; renderLook(); };
   $('c-all').onclick = () => { if (!sel) return; const L = lookOf(sel); L.slots.fill($('c-pick').value); renderLook(); };
   // every Nth wave in the picked colour, the rest left as wave 2's colour; the cycle is set to fit evenly
@@ -1046,7 +1238,7 @@ details[open] { display: grid; gap: 8px; }
   $('c-5').onclick = () => everyNth(5, 10);
   $('c-note').onclick = () => {
     if (!sel) return; const L = lookOf(sel), notesOf = o => o.chord || [o.s], mine = notesOf(sel);
-    for (const o of [...posts, ...leaves]) if (o !== sel && notesOf(o).some(n => mine.includes(n))) o.snd.look = { len: L.len, slots: [...L.slots], echo: L.echo };
+    for (const o of [...posts, ...leaves]) if (o !== sel && notesOf(o).some(n => mine.includes(n))) o.snd.look = { len: L.len, slots: [...L.slots], echo: [...L.echo] };
   };
   // Colour waves: the Water, Harmony and Turbulence views take their colours from each source's wave colours,
   // each mixing them its own way; off, they look exactly as they always have
@@ -1055,13 +1247,15 @@ details[open] { display: grid; gap: 8px; }
     try { localStorage.setItem('fds-colour-waves', on ? '1' : '0'); } catch (e) {}
   }
   $('cw').onclick = () => setColourWaves(!colourWaves);
-  // Colour echoes runs a wall-less twin of the water to tell bounced waves from direct ones. Switching it on restarts
-  // the water so the two start level; it roughly doubles the work, so it's off by default.
-  $('ce').onclick = () => {
-    echoes = !echoes; $('ce').setAttribute('aria-pressed', echoes ? 'true' : 'false');
-    if (echoes) { for (const L of layers.values()) withFree(L); resetWaves(); }
-    else for (const L of layers.values()) { delete L.fu; delete L.fup; delete L.fun; delete L.eDir; delete L.eEcho; }
-  };
+  // Colour echoes splits each source's water into bounce generations: straight from the source, first bounce, second,
+  // and everything after. Switching restarts the water, since the generations have to start level.
+  function setEchoes(on) {
+    echoes = on; GEN = on ? GENS_ECHO : 1; $('ce').setAttribute('aria-pressed', on ? 'true' : 'false');
+    if (GPU_OK) allocField();
+    resetWaves();
+    try { localStorage.setItem('fds-echoes', on ? '1' : '0'); } catch (e) {}
+  }
+  $('ce').onclick = () => setEchoes(!echoes);
   setColourWaves(colourWaves);
   $('grid').onchange = e => setGrid(+e.target.value);
   $('m-ear').onclick = () => setMeasure('ear');
@@ -1160,6 +1354,7 @@ details[open] { display: grid; gap: 8px; }
     if (tool === 'post' || tool === 'leaf') {
       if (!first || wall[c[1] * W + c[0]]) return;
       if (tool === 'post' && (octave - 2) * 12 + note > maxPitch()) return;
+      if (layersNeeded() + (tool === 'post' ? 1 : chord.size) > MAXL) { flashFull(); return; }
       const made = tool === 'post'
         ? { id: nextId++, x: c[0], y: c[1], s: (octave - 2) * 12 + note, muted: false, t0: t, snd: DEF_SND() }
         : { id: nextId++, x: c[0], y: c[1], chord: [...chord].filter(n => n <= maxPitch()).sort((a, b) => a - b), muted: false, t0: t, trail: [], snd: DEF_SND() };
@@ -1176,6 +1371,13 @@ details[open] { display: grid; gap: 8px; }
       last = c;
     }
     if (wallsChanged) rebuild();
+  }
+  // the water has room for 16 voices: each post is one, each note of a leaf's chord is one
+  function flashFull() {
+    const h = $('notehint'), was = h.textContent;
+    h.textContent = 'The water is full: 16 voices at most (a post is one, each note of a leaf is one). Remove something first.';
+    h.style.color = 'var(--turb)';
+    setTimeout(() => { h.style.color = ''; if (h.textContent.startsWith('The water is full')) h.textContent = was; }, 3500);
   }
   function commitStraight() {
     let wallsChanged = false;
@@ -1209,7 +1411,7 @@ details[open] { display: grid; gap: 8px; }
   // presets are laid out in base (1x) cells and scaled to the grid
   function box(x0, y0, x1, y1) { const K = gridK; for (let x = x0 * K; x < (x1 + 1) * K; x++) for (let y = y0 * K; y < (y1 + 1) * K; y++) wall[y * W + x] = 1; }
   function loadPreset(name) {
-    wall = new Uint8Array(N); posts = []; leaves = []; layers = new Map(); notes = new Map(); t = 0;
+    wall = new Uint8Array(N); posts = []; leaves = []; layers = new Map(); t = 0;
     const P = (x, y, s) => posts.push({ id: nextId++, x: x * gridK, y: y * gridK, s, muted: false, t0: 0, snd: DEF_SND() });
     sel = null;
     if (name === 'courtyard') {
@@ -1256,7 +1458,7 @@ details[open] { display: grid; gap: 8px; }
       wall = new Uint8Array(N); for (const i of d.w) if (i >= 0 && i < N) wall[i] = 1;
       posts = d.p.map(([x, y, s, m, snd]) => ({ id: nextId++, x, y, s, muted: !!m, t0: 0, snd: { ...DEF_SND(), ...(snd || {}) } }));
       leaves = (d.l || []).map(([x, y, c, m, snd]) => ({ id: nextId++, x, y, chord: c, muted: !!m, t0: 0, trail: [], snd: { ...DEF_SND(), ...(snd || {}) } }));
-      layers = new Map(); notes = new Map(); t = 0;
+      layers = new Map(); t = 0;
       rebuild(); changed();
       savedSig = raw; return true;
     } catch (e) { return false; }
@@ -1273,18 +1475,23 @@ details[open] { display: grid; gap: 8px; }
   function frame(ts) {
     const dt = lastTs === null || ts === undefined ? 0 : Math.min(0.1, (ts - lastTs) / 1000);
     lastTs = ts === undefined ? null : ts;
+    let n = 0;
     if (running) {
       pending += realTime ? dt * rtStepsPerSec() : speed;
       // never spend more than ~30 ms a frame stepping, so a fine grid slows the water rather than freezing the page
       const t0 = performance.now();
-      let n = 0; while (pending >= 1 && n < 40 && performance.now() - t0 < 30) { step(); pending -= 1; n++; }
+      while (pending >= 1 && n < 40 && performance.now() - t0 < 30) { step(); pending -= 1; n++; }
       if (pending >= 1) pending = 0;   // the machine couldn't keep up this frame: drop the backlog rather than spiral
     }
-    draw(); drawProbe(); updateSound();
+    if (GPU_OK) { const groups = uploadInfo(); readBack(groups); moveLeaves(n); draw(groups); }
+    else draw([]);
+    drawProbe(); updateSound();
     document.getElementById('clock').textContent = `t = ${t}`;
     requestAnimationFrame(frame);
   }
   window.addEventListener('resize', size);
+  if (GPU_OK) { try { initGPU(); } catch (e) { console.error(e); GPU_OK = false; } }
+  try { if (localStorage.getItem('fds-echoes') === '1') { echoes = true; GEN = GENS_ECHO; $('ce').setAttribute('aria-pressed', 'true'); } } catch (e) {}
   resizeCanvases(); setTool('wall'); if (!restoreMap()) loadPreset('courtyard');
   renderGrid(); renderNotes();
   { let m = 'ear'; try { m = localStorage.getItem('fds-measure') || 'ear'; } catch (e) {} setMeasure(m === 'wave' ? 'wave' : 'ear'); }
