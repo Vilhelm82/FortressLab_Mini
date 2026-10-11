@@ -212,6 +212,11 @@ details[open] { display: grid; gap: 8px; }
         <p class="hint" id="tuneempty">Press Tune on anything in the list to shape its sound and wave colours.</p>
         <div id="tunebody" hidden>
           <div class="tune">
+            <div id="pitchbox" class="tune">
+              <h3>Pitch</h3>
+              <div class="ctl"><label for="s-pitch" id="s-pitchl">Octave 4</label><input id="s-pitch" type="range" min="0" max="1200" step="1" value="0"><span class="val" id="s-pitchv"></span></div>
+              <div class="btnrow"><button id="p-down">− octave</button><button id="p-snap">Snap to note</button><button id="p-up">+ octave</button></div>
+            </div>
             <h3>Sound</h3>
             <div class="ctl"><label for="s-shape">Wave</label>
               <select id="s-shape"><option value="overtones">Field tone (8 overtones)</option><option value="sine">Sine</option><option value="triangle">Triangle</option><option value="sawtooth">Saw</option><option value="square">Square</option></select><span></span></div>
@@ -292,7 +297,12 @@ details[open] { display: grid; gap: 8px; }
   const NOTE_COUNT = 48, A4 = 33;
   const freqHz = s => 440 * Math.pow(2, (s - A4) / 12);
   const lambda = s => LAMBDA_A4 * Math.pow(2, -(s - A4) / 12);
-  const label = s => NAMES[s % 12] + (2 + Math.floor(s / 12));
+  // a pitch's name, with cents when it sits between notes (C4+37¢)
+  function label(s) {
+    const r = Math.round(s), cents = Math.round((s - r) * 100);
+    const base = NAMES[((r % 12) + 12) % 12] + (2 + Math.floor(r / 12));
+    return cents === 0 ? base : base + (cents > 0 ? '+' : '−') + Math.abs(cents) + '¢';
+  }
 
   // ---------- consonance, derived from overtones ----------
   // Two notes clash where their overtones sit close enough to beat (Plomp-Levelt roughness,
@@ -308,37 +318,53 @@ details[open] { display: grid; gap: 8px; }
       t += roughPair(freqHz(a) * (p + 1), Math.pow(DECAY, p), freqHz(b) * (q + 1), Math.pow(DECAY, q));
     return t;
   }
-  const D_EAR = []; let dmax = 0;
-  for (let a = 0; a < NOTE_COUNT; a++) { D_EAR[a] = []; for (let b = 0; b < NOTE_COUNT; b++) {
-    const v = Math.max(0, cross(a, b) - 0.5 * (cross(a, a) + cross(b, b))); D_EAR[a][b] = v; if (v > dmax) dmax = v; } }
-  for (let a = 0; a < NOTE_COUNT; a++) for (let b = 0; b < NOTE_COUNT; b++) D_EAR[a][b] /= dmax;
+  // Pitches are semitones from C2 and may be fractional (the pitch slider glides between notes),
+  // so clash is worked out for any two pitches on demand and remembered.
+  const pairKey = (a, b) => Math.round(a * 100) * 100000 + Math.round(b * 100);
+  let dmax = 0;
+  for (let a = 0; a < NOTE_COUNT; a++) for (let b = a; b < NOTE_COUNT; b++)
+    dmax = Math.max(dmax, cross(a, b) - 0.5 * (cross(a, a) + cross(b, b)));
+  const earCache = new Map();
+  function earClash(a, b) {
+    const k = pairKey(a, b); let v = earCache.get(k);
+    if (v === undefined) { v = Math.max(0, cross(a, b) - 0.5 * (cross(a, a) + cross(b, b))) / dmax; earCache.set(k, v); }
+    return v;
+  }
 
   // ---------- consonance, from how well the waves line up ----------
   // Two notes in a simple whole-number ratio share overtones exactly and their combined wave repeats quickly;
   // a complicated ratio barely repeats at all. Each interval is matched to the simplest ratio of 2s, 3s and 5s
   // it sits near (classic Western tuning), scored by how big that ratio's numbers are, log2(p*q), plus a cost
-  // for how far the real equal-tempered pitch drifts from it. Same in every octave: the field is water, not an ear.
+  // for how far the real pitch drifts from it. Same in every octave: the field is water, not an ear.
   const DRIFT_CENTS = 15;   // how much drift from a ratio costs as much as one step of complexity
   const FIVE = []; for (let a = 1; a <= 4096; a *= 2) for (let b = a; b <= 4096; b *= 3) for (let c = b; c <= 4096; c *= 5) FIVE.push(c);
   const gcd = (x, y) => y ? gcd(y, x % y) : x;
-  const ratioOf = [];
-  function waveScore(n) {
-    let best = Infinity, ratio = '';
-    for (const p of FIVE) for (const q of FIVE) {
-      if (p < q || gcd(p, q) !== 1) continue;
-      const err = Math.abs(1200 * Math.log2(p / q) - 100 * n);
-      if (err > 50) continue;
-      const sc = Math.log2(p * q) + Math.pow(err / DRIFT_CENTS, 2);
-      if (sc < best) { best = sc; ratio = p + ':' + q; }
-    }
-    ratioOf[n] = ratio; return best;
+  const RATIOS = [];
+  for (const p of FIVE) for (const q of FIVE) {
+    if (p < q || gcd(p, q) !== 1) continue;
+    const c = 1200 * Math.log2(p / q); if (c > 6100) continue;
+    RATIOS.push({ c, h: Math.log2(p * q), r: p + ':' + q });
   }
-  const byGap = []; let wmax = 0;
-  for (let n = 0; n < NOTE_COUNT; n++) { byGap[n] = waveScore(n); wmax = Math.max(wmax, byGap[n]); }
-  const D_WAVE = [];
-  for (let a = 0; a < NOTE_COUNT; a++) { D_WAVE[a] = []; for (let b = 0; b < NOTE_COUNT; b++) D_WAVE[a][b] = byGap[Math.abs(b - a)] / wmax; }
+  function waveFit(cents) {
+    let best = Infinity, ratio = '';
+    for (const R of RATIOS) {
+      const err = Math.abs(R.c - cents); if (err > 50) continue;
+      const sc = R.h + Math.pow(err / DRIFT_CENTS, 2);
+      if (sc < best) { best = sc; ratio = R.r; }
+    }
+    return { score: best, ratio };
+  }
+  let wmax = 0; for (let n = 0; n < NOTE_COUNT; n++) wmax = Math.max(wmax, waveFit(100 * n).score);
+  const waveCache = new Map();
+  function waveClash(a, b) {
+    const k = pairKey(a, b); let v = waveCache.get(k);
+    if (v === undefined) { v = waveFit(100 * (b - a)).score / wmax; waveCache.set(k, v); }
+    return v;
+  }
+  const ratioAt = (a, b) => waveFit(100 * Math.abs(b - a)).ratio;
+  function clashOf(a, b) { if (a > b) { const t = a; a = b; b = t; } return measure === 'wave' ? waveClash(a, b) : earClash(a, b); }
 
-  let D = D_EAR, measure = 'ear';
+  let measure = 'ear';
 
   // ---------- state ----------
   let wall = new Uint8Array(N);
@@ -354,7 +380,7 @@ details[open] { display: grid; gap: 8px; }
     return '#' + f(0) + f(8) + f(4); };
   const hex2rgb = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
   function lookOf(src) {
-    if (!src.snd.look) { const pc = (src.chord ? src.chord[0] : src.s) % 12; src.snd.look = { len: 12, slots: Array(12).fill(hsl2hex(pc * 30, 70, 62)) }; }
+    if (!src.snd.look) { const pc = ((Math.round(src.chord ? src.chord[0] : src.s) % 12) + 12) % 12; src.snd.look = { len: 12, slots: Array(12).fill(hsl2hex(pc * 30, 70, 62)) }; }
     const L = src.snd.look; if (!L.rgb || L.rgbOf !== L.slots.join()) { L.rgb = L.slots.map(hex2rgb); L.rgbOf = L.slots.join(); }
     return L;
   }
@@ -432,7 +458,8 @@ details[open] { display: grid; gap: 8px; }
       // time it adds no net water. Driving with the tone directly left a little extra every cycle, and in a walled-off
       // area with nowhere to drain it the whole region slowly rose or sank: a silent offset that looked and sounded
       // like the note was everywhere. Same loudness as before.
-      const src = L.src, f = (src.env || 0) * Math.cos(L.omega * t);
+      L.phase = (L.phase || 0) + L.omega;   // a running phase, so a pitch change glides instead of jumping
+      const src = L.src, f = (src.env || 0) * Math.cos(L.phase);
       un[src.chord ? leafCell(src) : src.y * W + src.x] += AMP * (L.fPrev - f) / L.omega;
       L.fPrev = f;
       L.up = u; L.u = un; L.un = up;
@@ -464,7 +491,7 @@ details[open] { display: grid; gap: 8px; }
     for (const [s, e2] of amp) {
       const A = Math.sqrt(e2);
       if (l.chord.includes(s)) q += A;
-      else { let d = 0; for (const c of l.chord) d += D[s][c]; q -= A * d / l.chord.length; }
+      else { let d = 0; for (const c of l.chord) d += clashOf(s, c); q -= A * d / l.chord.length; }
     }
     return q;
   }
@@ -496,7 +523,7 @@ details[open] { display: grid; gap: 8px; }
     let E = 0, R = 0, P = 0;
     for (let a = 0; a < arr.length; a++) {
       const A = Math.sqrt(2 * arr[a].e[i]); E += A * A;
-      for (let b = a + 1; b < arr.length; b++) { const w = A * Math.sqrt(2 * arr[b].e[i]); P += w; R += w * D[arr[a].s][arr[b].s]; }
+      for (let b = a + 1; b < arr.length; b++) { const w = A * Math.sqrt(2 * arr[b].e[i]); P += w; R += w * clashOf(arr[a].s, arr[b].s); }
     }
     return { E, R, clash: P > 1e-12 ? R / P : 0 };
   }
@@ -524,7 +551,7 @@ details[open] { display: grid; gap: 8px; }
   // the colour of the wave of this layer passing through a cell right now, from its source's colour cycle
   function waveColour(L, i) {
     const x = i % W, y = (i / W) | 0, src = L.src, u = L.u[i];
-    const geo = L.omega * t - (L.omega / WAVE_C) * Math.hypot(x - src.x, y - src.y);
+    const geo = (L.phase || 0) - (L.omega / WAVE_C) * Math.hypot(x - src.x, y - src.y);
     const psi = Math.atan2(u, (u - L.up[i]) / L.omega);
     let d = (psi - geo) % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI;
     const n = Math.round((geo + d - Math.PI / 2) / (2 * Math.PI));
@@ -563,7 +590,7 @@ details[open] { display: grid; gap: 8px; }
         if (Math.abs(kk) > 0.02) for (const L of layers.values()) {
           const src = L.src; if (src.muted) continue;
           const u = L.u[i], wgt = u * sign; if (wgt <= 0) continue;
-          const k = L.omega / WAVE_C, geo = L.omega * t - k * Math.hypot(x - src.x, y - src.y);
+          const k = L.omega / WAVE_C, geo = (L.phase || 0) - k * Math.hypot(x - src.x, y - src.y);
           const psi = Math.atan2(u, (u - L.up[i]) / L.omega);
           let d = (psi - geo) % (2 * Math.PI); if (d > Math.PI) d -= 2 * Math.PI; if (d < -Math.PI) d += 2 * Math.PI;
           const n = Math.round((geo + d - Math.PI / 2) / (2 * Math.PI));
@@ -595,7 +622,7 @@ details[open] { display: grid; gap: 8px; }
           // with wave colours on, the churn takes the colours of the waves causing it, each weighted by how much clash it brings
           const hot = colourWaves ? blendWaves(i, L => {
             const A = Math.sqrt(2 * L.e[i]); let q = 0;
-            for (const O of layers.values()) if (O !== L && !O.src.muted) q += Math.sqrt(2 * O.e[i]) * D[L.s][O.s];
+            for (const O of layers.values()) if (O !== L && !O.src.muted) q += Math.sqrt(2 * O.e[i]) * clashOf(L.s, O.s);
             return A * q;
           }, COL.turb) : COL.turb;
           c = mix(COL.deep, hot, r);
@@ -700,6 +727,7 @@ details[open] { display: grid; gap: 8px; }
     for (const L of all) {
       const v = voice(L), snd = L.src.snd;
       applySettings(v, snd, now);
+      v.o.frequency.setTargetAtTime(freqHz(L.s), now, 0.02);
       const A = here && !L.src.muted ? Math.sqrt(2 * L.e[hover]) : 0;
       v.g.gain.setTargetAtTime(Math.min(1, Math.sqrt(A / gS)) * share * snd.vol, now, 0.06);
     }
@@ -750,7 +778,7 @@ details[open] { display: grid; gap: 8px; }
       const s = (octave - 2) * 12 + i;
       const on = tool === 'leaf' ? chord.has(s) : i === note;
       c.setAttribute('aria-pressed', on ? 'true' : 'false');
-      if (hoverPost) c.setAttribute('data-iv', IV_CLASS[(((s - hoverPost.s) % 12) + 12) % 12]); else c.removeAttribute('data-iv');
+      if (hoverPost) c.setAttribute('data-iv', IV_CLASS[((Math.round(s - hoverPost.s) % 12) + 12) % 12]); else c.removeAttribute('data-iv');
     });
     document.getElementById('ivwho').textContent = hoverPost
       ? 'Against post ' + label(hoverPost.s) + ':' : 'Hover a post to colour the notes against it.';
@@ -789,7 +817,7 @@ details[open] { display: grid; gap: 8px; }
     for (const a of ss) {
       h += `<tr><th>${label(a)}</th>`;
       for (const b of ss) {
-        const v = D[a][b], tip = measure === 'wave' ? ` title="${ratioOf[Math.abs(b - a)]}"` : '';
+        const v = clashOf(a, b), tip = measure === 'wave' ? ` title="${ratioAt(a, b)}"` : '';
         h += a === b ? '<td style="color:var(--muted)">·</td>' : `<td${tip} style="color:${rgb(mix(COL.calm, COL.turb, Math.min(1, v)))}">${v.toFixed(2)}</td>`;
       }
       h += '</tr>';
@@ -804,7 +832,7 @@ details[open] { display: grid; gap: 8px; }
     wave: '0 is perfect agreement, 1 the harshest clash in the range. Waves: how simple a ratio the two notes form (hover a number to see it), plus a cost for equal-tempered drift. The same in every octave.'
   };
   function setMeasure(m) {
-    measure = m; D = m === 'wave' ? D_WAVE : D_EAR;
+    measure = m;
     $('m-ear').setAttribute('aria-pressed', m === 'ear' ? 'true' : 'false');
     $('m-wave').setAttribute('aria-pressed', m === 'wave' ? 'true' : 'false');
     $('mxhint').textContent = MX_HINT[m];
@@ -818,12 +846,43 @@ details[open] { display: grid; gap: 8px; }
   const cutPos = hz => 100 * Math.log(hz / 60) / Math.log(200);
   const qOf = v => 0.3 * Math.pow(60, v / 100);            // gentle to sharp
   const qPos = q => 100 * Math.log(q / 0.3) / Math.log(60);
+  // ---------- gliding a post's pitch ----------
+  // The slider runs from the C at the bottom of the post's octave up to the next C, in cents. Waves already out in
+  // the water keep the pitch they left with, just as in air; new waves leave at the new pitch.
+  let pitchBase = 24;
+  function setPitch(p, s) {
+    s = Math.max(0, Math.min(NOTE_COUNT, s));
+    const old = p.s; if (old === s) return;
+    p.s = s;
+    const L = layers.get('p' + p.id);
+    if (L) {
+      L.s = s; L.omega = 2 * Math.PI * (WAVE_C / lambda(s));
+      // carry the combined-strength record over to the new pitch when nothing else is using the old one
+      const shared = [...layers.values()].some(o => o !== L && o.s === old);
+      if (!shared && notes.has(old) && !notes.has(s)) { const n = notes.get(old); notes.delete(old); n.s = s; notes.set(s, n); }
+      else if (!notes.has(s)) notes.set(s, { s, e: new Float32Array(N) });
+      if (!shared && notes.has(old)) notes.delete(old);
+    }
+    renderPosts(); renderMatrix(); renderNotes();
+  }
+  function renderPitch() {
+    const isPost = !!sel && !sel.chord; $('pitchbox').hidden = !isPost; if (!isPost) return;
+    $('s-pitch').value = Math.round((sel.s - pitchBase) * 100);
+    $('s-pitchl').textContent = 'Octave ' + (2 + pitchBase / 12);
+    $('s-pitchv').textContent = label(sel.s) + ' · ' + freqHz(sel.s).toFixed(1) + ' Hz';
+  }
+  $('s-pitch').addEventListener('input', e => { if (!sel || sel.chord) return; setPitch(sel, pitchBase + e.target.value / 100); renderPitch(); });
+  $('p-snap').onclick = () => { if (!sel || sel.chord) return; setPitch(sel, Math.round(sel.s)); renderPitch(); };
+  $('p-down').onclick = () => { if (!sel || sel.chord || pitchBase < 12) return; pitchBase -= 12; setPitch(sel, sel.s - 12); renderPitch(); };
+  $('p-up').onclick = () => { if (!sel || sel.chord || pitchBase + 12 > NOTE_COUNT - 12) return; pitchBase += 12; setPitch(sel, sel.s + 12); renderPitch(); };
+
   function renderTune() {
     $('tuneempty').hidden = !!sel; $('tunebody').hidden = !sel;
+    if (sel && !sel.chord) pitchBase = 12 * Math.min(3, Math.floor(sel.s / 12));
     if (!sel) { $('tuneh').textContent = 'Tune'; return; }
     const s = sel.snd;
     $('tuneh').textContent = 'Tune ' + (sel.chord ? 'leaf ' + sel.chord.map(label).join(' ') : 'post ' + label(sel.s));
-    renderLook();
+    renderLook(); renderPitch();
     $('s-shape').value = s.shape; $('s-filter').value = s.filter;
     $('s-cut').value = cutPos(s.cutoff); $('s-q').value = qPos(s.q);
     $('s-vol').value = s.vol * 100; $('s-verb').value = s.verb * 100;
