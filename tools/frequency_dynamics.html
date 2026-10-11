@@ -60,7 +60,12 @@ aside { display: grid; gap: 12px; min-width: 0; }
 select, input[type=range] { accent-color: var(--stone); }
 select { font: 13px var(--font-body); background: var(--raise); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; }
 .posts { display: grid; gap: 6px; max-height: 220px; overflow: auto; }
-.post { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; align-items: center; font-size: 13px; }
+.post { display: grid; grid-template-columns: auto 1fr auto auto auto; gap: 6px; align-items: center; font-size: 13px; padding-left: 4px; }
+.post button[aria-pressed="true"] { border-color: var(--stone); color: var(--stone); }
+.tune { display: grid; gap: 8px; }
+.tune .row label { min-width: 64px; }
+.tune input[type=range] { flex: 1; min-width: 90px; }
+.tune .val { font-family: var(--font-data); font-size: 11px; color: var(--muted); min-width: 56px; text-align: right; }
 .post .dot { width: 10px; height: 10px; border-radius: 50%; }
 .post .nm { font-family: var(--font-data); }
 .post button { padding: 3px 8px; font-size: 12px; }
@@ -121,7 +126,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
         <div class="chordv" id="chordv" hidden></div>
         <div class="row">
           <label for="oct">Octave</label>
-          <select id="oct"><option value="4" selected>4</option><option value="5">5</option></select>
+          <select id="oct"><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select>
         </div>
         <p class="hint" id="notehint">Pick a note, then click the map to place a post. Hold Shift while drawing walls to keep them straight.</p>
       </div>
@@ -134,6 +139,29 @@ table.mx th { color: var(--muted); font-weight: 500; }
       <div class="card">
         <h2>Probe</h2>
         <div class="probe" id="probe"><span class="empty">Hover the map to read a cell. Turn sound on to hear it.</span></div>
+      </div>
+
+      <div class="card">
+        <h2 id="tuneh">Sound</h2>
+        <div class="tune" id="tune">
+          <p class="hint" id="tuneempty">Press Sound on a post or leaf in the list above to shape how it sounds.</p>
+          <div id="tunebody" hidden>
+            <div class="tune">
+              <div class="row"><label for="s-shape">Wave</label>
+                <select id="s-shape"><option value="overtones">Overtones (the field's own tone)</option><option value="sine">Sine</option><option value="triangle">Triangle</option><option value="sawtooth">Saw</option><option value="square">Square</option></select></div>
+              <div class="row"><label for="s-filter">Filter</label>
+                <select id="s-filter"><option value="none">Off</option><option value="lowpass">Low pass</option><option value="bandpass">Band pass</option><option value="highpass">High pass</option></select></div>
+              <div class="row"><label for="s-cut">Cutoff</label><input id="s-cut" type="range" min="0" max="100" value="60"><span class="val" id="s-cutv"></span></div>
+              <div class="row"><label for="s-q">Resonance</label><input id="s-q" type="range" min="0" max="100" value="20"><span class="val" id="s-qv"></span></div>
+              <div class="row"><label for="s-vol">Volume</label><input id="s-vol" type="range" min="0" max="200" value="100"><span class="val" id="s-volv"></span></div>
+              <div class="row"><label for="s-verb">Reverb</label><input id="s-verb" type="range" min="0" max="100" value="25"><span class="val" id="s-verbv"></span></div>
+              <div class="row"><button id="s-all">Use these settings on everything</button></div>
+            </div>
+          </div>
+          <div class="row"><label for="m-vol">Master</label><input id="m-vol" type="range" min="0" max="100" value="80" style="flex:1"></div>
+          <div class="row"><label for="m-room">Room</label><input id="m-room" type="range" min="2" max="80" value="22" style="flex:1"><span class="val" id="m-roomv">2.2 s</span></div>
+          <p class="hint">These shape what you hear only. The clash maths and the leaves always use the field's own 8-overtone tone.</p>
+        </div>
       </div>
 
       <div class="card">
@@ -188,8 +216,8 @@ table.mx th { color: var(--muted); font-weight: 500; }
   // ---------- grid and constants ----------
   const W = 160, H = 100, N = W * H;
   const WAVE_C = 0.5, C2 = WAVE_C * WAVE_C;   // waves travel half a cell a step, inside the 2D stability limit
-  const LAMBDA_A4 = 13;         // wavelength of A4 in cells; every other note keeps the true ratio
-  const SPONGE = 14, SMAX = 0.16;
+  const LAMBDA_A4 = 11;         // wavelength of A4 in cells; every other note keeps the true ratio (C2 about 74, B5 about 5)
+  const SPONGE = 18, SMAX = 0.16;   // wide enough to soak up long bass waves at an open edge
   const AMP = 0.6, RAMP = 120, EMA = 0.012;
   const LEAF_R = 2;             // how far either side a leaf feels the slope of the water
   const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
@@ -198,10 +226,11 @@ table.mx th { color: var(--muted); font-weight: 500; }
   const hex = v => { const h = css.getPropertyValue(v).trim().replace('#',''); return [0,2,4].map(i => parseInt(h.slice(i, i+2), 16)); };
   const COL = { deep: hex('--deep'), crest: hex('--crest'), calm: hex('--calm'), turb: hex('--turb'), stone: hex('--stone'), bg: hex('--bg'), fg: hex('--fg') };
 
-  // semitone index s: 0 = C4 ... 23 = B5
-  const freqHz = s => 440 * Math.pow(2, (s - 9) / 12);
-  const lambda = s => LAMBDA_A4 * Math.pow(2, -(s - 9) / 12);
-  const label = s => NAMES[s % 12] + (4 + Math.floor(s / 12));
+  // semitone index s: 0 = C2 ... 47 = B5, so A4 (440 Hz) is 33
+  const NOTE_COUNT = 48, A4 = 33;
+  const freqHz = s => 440 * Math.pow(2, (s - A4) / 12);
+  const lambda = s => LAMBDA_A4 * Math.pow(2, -(s - A4) / 12);
+  const label = s => NAMES[s % 12] + (2 + Math.floor(s / 12));
 
   // ---------- consonance, derived from overtones ----------
   // Two notes clash where their overtones sit close enough to beat (Plomp-Levelt roughness,
@@ -218,21 +247,24 @@ table.mx th { color: var(--muted); font-weight: 500; }
     return t;
   }
   const D = []; let dmax = 0;
-  for (let a = 0; a < 24; a++) { D[a] = []; for (let b = 0; b < 24; b++) {
+  for (let a = 0; a < NOTE_COUNT; a++) { D[a] = []; for (let b = 0; b < NOTE_COUNT; b++) {
     const v = Math.max(0, cross(a, b) - 0.5 * (cross(a, a) + cross(b, b))); D[a][b] = v; if (v > dmax) dmax = v; } }
-  for (let a = 0; a < 24; a++) for (let b = 0; b < 24; b++) D[a][b] /= dmax;
+  for (let a = 0; a < NOTE_COUNT; a++) for (let b = 0; b < NOTE_COUNT; b++) D[a][b] /= dmax;
 
   // ---------- state ----------
   let wall = new Uint8Array(N);
-  let posts = [];               // {x, y, s, muted, t0}
-  let leaves = [];              // {id, x, y (fractional), chord: [s], muted, t0, trail}
-  let nextLeaf = 1;
+  let posts = [];               // {id, x, y, s, muted, t0, snd}
+  let leaves = [];              // {id, x, y (fractional), chord: [s], muted, t0, trail, snd}
+  let nextId = 1;
+  // how a source sounds when you listen; this is for your ears only, the clash maths always uses the 8-overtone tone
+  const DEF_SND = () => ({ shape: 'overtones', filter: 'none', cutoff: 2000, q: 1, vol: 1, verb: 0.25 });
+  let sel = null;               // the post or leaf whose sound is being tuned
   // One wave layer per source group: all posts on a note share one; each leaf has its own per note,
   // so a leaf can tell its own song apart from everyone else's.
-  let layers = new Map();       // key -> {key, s, owner, omega, u, up, un, e}
+  let layers = new Map();       // key -> {key, s, src, omega, u, up, un, e}
   let notes = new Map();        // s -> {s, e}: the combined strength of each note, what you see and hear
   let t = 0, running = true, tool = 'wall', view = 'harm', note = 0, octave = 4;
-  let chord = new Set([0, 4, 7]);
+  let chord = new Set([24, 28, 31]);   // C4 E4 G4
   let edgeOpen = true, air = 0, speed = 4, pending = 0, kappa = 0.5 * Math.pow(1000, 0.5);
   let nL, nR, nU, nD, live, sigma, warming = true;
 
@@ -257,13 +289,15 @@ table.mx th { color: var(--muted); font-weight: 500; }
     for (const n of notes.values()) for (let i = 0; i < N; i++) if (wall[i]) n.e[i] = 0;
   }
 
-  const newLayer = (key, s, owner) => ({ key, s, owner, omega: 2 * Math.PI * (WAVE_C / lambda(s)), u: new Float32Array(N), up: new Float32Array(N), un: new Float32Array(N), e: new Float32Array(N) });
+  // every post and every note of every leaf gets its own layer, so each can be heard and tuned on its own
+  const newLayer = (key, s, src) => ({ key, s, src, omega: 2 * Math.PI * (WAVE_C / lambda(s)), u: new Float32Array(N), up: new Float32Array(N), un: new Float32Array(N), e: new Float32Array(N) });
   function syncLayers() {
     const want = new Map();
-    for (const p of posts) want.set('p' + p.s, [p.s, 0]);
-    for (const l of leaves) for (const s of l.chord) want.set('l' + l.id + ':' + s, [s, l.id]);
+    for (const p of posts) want.set('p' + p.id, [p.s, p]);
+    for (const l of leaves) for (const s of l.chord) want.set('l' + l.id + ':' + s, [s, l]);
     for (const k of [...layers.keys()]) if (!want.has(k)) layers.delete(k);
-    for (const [k, [s, owner]] of want) if (!layers.has(k)) layers.set(k, newLayer(k, s, owner));
+    for (const [k, [s, src]] of want) { if (!layers.has(k)) layers.set(k, newLayer(k, s, src)); else layers.get(k).src = src; }
+    if (sel && !posts.includes(sel) && !leaves.includes(sel)) { sel = null; renderTune(); }
     const used = new Set([...want.values()].map(v => v[0]));
     for (const s of [...notes.keys()]) if (!used.has(s)) notes.delete(s);
     for (const s of used) if (!notes.has(s)) notes.set(s, { s, e: new Float32Array(N) });
@@ -290,8 +324,8 @@ table.mx th { color: var(--muted); font-weight: 500; }
         un[i] = (2 * u[i] - (1 - s) * up[i] + C2 * lap) / (1 + s);
       }
       const wave = AMP * Math.sin(L.omega * t);
-      if (L.owner === 0) { for (const p of posts) if (p.s === L.s && !p.muted) un[p.y * W + p.x] += wave * ramp(p); }
-      else { const l = leaves.find(q => q.id === L.owner); if (l && !l.muted) un[leafCell(l)] += wave * ramp(l); }
+      const src = L.src;
+      if (!src.muted) un[src.chord ? leafCell(src) : src.y * W + src.x] += wave * ramp(src);
       L.up = u; L.u = un; L.un = up;
       const nu = L.u;
       for (let k = 0; k < live.length; k++) { const i = live[k]; e[i] += (nu[i] * nu[i] - e[i]) * EMA; }
@@ -316,7 +350,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
   function suitability(l, i) {
     if (i < 0 || wall[i]) return null;
     const amp = new Map();
-    for (const L of layers.values()) if (L.owner !== l.id) amp.set(L.s, (amp.get(L.s) || 0) + 2 * L.e[i]);
+    for (const L of layers.values()) if (L.src !== l) amp.set(L.s, (amp.get(L.s) || 0) + 2 * L.e[i]);
     let q = 0;
     for (const [s, e2] of amp) {
       const A = Math.sqrt(e2);
@@ -461,35 +495,52 @@ table.mx th { color: var(--muted); font-weight: 500; }
   }
 
   // ---------- sound: hear the water under the cursor ----------
-  // Each note in the water plays as a real tone with the same 8 overtones the clash table is built from,
-  // at the strength it has in the hovered cell. Clashing water sounds rough because it is.
-  let actx = null, master = null, wave = null, soundOn = false;
+  // Every source plays its note at the strength its own waves have in the hovered cell, through its own
+  // little synth voice: oscillator, filter, volume, and a send into a shared reverb.
+  let actx = null, master = null, verb = null, verbIn = null, wave = null, soundOn = false;
+  let masterVol = 0.8, room = 2.2;
   const voices = new Map();
-  function voice(s) {
-    if (voices.has(s)) return voices.get(s);
-    const o = actx.createOscillator(), g = actx.createGain();
-    o.setPeriodicWave(wave); o.frequency.value = freqHz(s); g.gain.value = 0;
-    o.connect(g).connect(master); o.start();
-    const v = { o, g }; voices.set(s, v); return v;
+  function makeRoom(seconds) {
+    // a reverb tail made from decaying noise, a little different on each side
+    const len = Math.max(1, Math.floor(actx.sampleRate * seconds)), buf = actx.createBuffer(2, len, actx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = buf.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
+    verb.buffer = buf;
+  }
+  function voice(L) {
+    if (voices.has(L.key)) return voices.get(L.key);
+    const o = actx.createOscillator(), f = actx.createBiquadFilter(), g = actx.createGain(), send = actx.createGain();
+    o.frequency.value = freqHz(L.s); g.gain.value = 0;
+    o.connect(f).connect(g); g.connect(master); g.connect(send).connect(verbIn); o.start();
+    const v = { o, f, g, send, shape: null }; voices.set(L.key, v); return v;
+  }
+  function applySettings(v, snd, now) {
+    if (v.shape !== snd.shape) { if (snd.shape === 'overtones') v.o.setPeriodicWave(wave); else v.o.type = snd.shape; v.shape = snd.shape; }
+    if (snd.filter === 'none') { v.f.type = 'allpass'; v.f.frequency.setTargetAtTime(20000, now, 0.03); v.f.Q.setTargetAtTime(0.0001, now, 0.03); }
+    else { v.f.type = snd.filter; v.f.frequency.setTargetAtTime(snd.cutoff, now, 0.03); v.f.Q.setTargetAtTime(snd.q, now, 0.03); }
+    v.send.gain.setTargetAtTime(snd.verb, now, 0.05);
   }
   function updateSound() {
     if (!actx) return;
-    const now = actx.currentTime, arr = Ns(), here = soundOn && hover >= 0 && !wall[hover];
-    const present = new Set(arr.map(n => n.s));
+    const now = actx.currentTime, here = soundOn && hover >= 0 && !wall[hover];
+    const all = [...layers.values()];
     // Loudness follows the same square-root curve as the picture's brightness. Measured straight against the
     // loudest cell on the map (right on top of a post) almost everywhere else came out near silent.
-    const share = 0.5 / Math.sqrt(Math.max(1, arr.length));
-    for (const n of arr) {
-      const A = here ? Math.sqrt(2 * n.e[hover]) : 0;
-      voice(n.s).g.gain.setTargetAtTime(Math.min(1, Math.sqrt(A / gS)) * share, now, 0.06);
+    const share = 0.5 / Math.sqrt(Math.max(1, all.length));
+    for (const L of all) {
+      const v = voice(L), snd = L.src.snd;
+      applySettings(v, snd, now);
+      const A = here && !L.src.muted ? Math.sqrt(2 * L.e[hover]) : 0;
+      v.g.gain.setTargetAtTime(Math.min(1, Math.sqrt(A / gS)) * share * snd.vol, now, 0.06);
     }
-    for (const [s, v] of voices) if (!present.has(s)) v.g.gain.setTargetAtTime(0, now, 0.06);
+    for (const [k, v] of voices) if (!layers.has(k)) { v.g.gain.setTargetAtTime(0, now, 0.03); v.o.stop(now + 0.2); voices.delete(k); }
+    master.gain.setTargetAtTime(masterVol, now, 0.05);
   }
   const sound$ = document.getElementById('sound');
   sound$.onclick = async () => {
     if (!actx) {
       actx = new (window.AudioContext || window.webkitAudioContext)();
-      master = actx.createGain(); master.gain.value = 0.8; master.connect(actx.destination);
+      master = actx.createGain(); master.gain.value = masterVol; master.connect(actx.destination);
+      verbIn = actx.createGain(); verb = actx.createConvolver(); verbIn.connect(verb).connect(master); makeRoom(room);
       const imag = new Float32Array(PARTIALS + 1); for (let k = 1; k <= PARTIALS; k++) imag[k] = Math.pow(DECAY, k - 1);
       wave = actx.createPeriodicWave(new Float32Array(PARTIALS + 1), imag);
     }
@@ -498,7 +549,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
     if (soundOn) {
       // a short chime on switching on, so you know the browser is letting sound through before you hover
       const o = actx.createOscillator(), g = actx.createGain(), now = actx.currentTime;
-      o.setPeriodicWave(wave); o.frequency.value = freqHz(12);
+      o.setPeriodicWave(wave); o.frequency.value = freqHz(36);
       g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(0.3, now + 0.02); g.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
       o.connect(g).connect(master); o.start(now); o.stop(now + 0.55);
     }
@@ -511,7 +562,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
   NAMES.forEach((n, i) => {
     const b = document.createElement('button'); b.textContent = n; if (n.includes('#')) b.className = 'sharp';
     b.onclick = () => {
-      const s = (octave - 4) * 12 + i;
+      const s = (octave - 2) * 12 + i;
       if (tool === 'leaf') { if (chord.has(s)) { if (chord.size > 1) chord.delete(s); } else chord.add(s); }
       else { note = i; setTool('post'); }
       renderNotes();
@@ -520,7 +571,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
   });
   function renderNotes() {
     [...notes$.children].forEach((c, i) => {
-      const on = tool === 'leaf' ? chord.has((octave - 4) * 12 + i) : i === note;
+      const on = tool === 'leaf' ? chord.has((octave - 2) * 12 + i) : i === note;
       c.setAttribute('aria-pressed', on ? 'true' : 'false');
     });
     const cv = document.getElementById('chordv');
@@ -536,10 +587,14 @@ table.mx th { color: var(--muted); font-weight: 500; }
     const row = (dot, text, obj, remove) => {
       const r = document.createElement('div'); r.className = 'post';
       r.innerHTML = `<span class="dot" style="background:${obj.muted ? 'var(--line)' : dot}"></span><span class="nm">${text}</span>`;
+      if (obj === sel) r.style.boxShadow = 'inset 2px 0 0 var(--stone)';
+      const tn = document.createElement('button'); tn.textContent = 'Sound';
+      tn.setAttribute('aria-pressed', obj === sel ? 'true' : 'false');
+      tn.onclick = () => { sel = obj; renderPosts(); renderTune(); };
       const m = document.createElement('button'); m.textContent = obj.muted ? 'Unmute' : 'Mute';
       m.onclick = () => { obj.muted = !obj.muted; renderPosts(); };
       const d = document.createElement('button'); d.textContent = 'Remove'; d.onclick = remove;
-      r.append(m, d); el.appendChild(r);
+      r.append(tn, m, d); el.appendChild(r);
     };
     posts.forEach((p, k) => row('var(--fg)', `${label(p.s)} <span style="color:var(--muted)">post at ${p.x}, ${p.y}</span>`, p,
       () => { posts.splice(k, 1); changed(); }));
@@ -562,6 +617,38 @@ table.mx th { color: var(--muted); font-weight: 500; }
     el.innerHTML = h + '</table>';
   }
   function changed() { syncLayers(); renderPosts(); renderMatrix(); }
+
+  // ---------- tuning one source's sound ----------
+  const $ = id => document.getElementById(id);
+  const cutHz = v => 60 * Math.pow(200, v / 100);          // 60 Hz to 12 kHz
+  const cutPos = hz => 100 * Math.log(hz / 60) / Math.log(200);
+  const qOf = v => 0.3 * Math.pow(60, v / 100);            // gentle to sharp
+  const qPos = q => 100 * Math.log(q / 0.3) / Math.log(60);
+  function renderTune() {
+    $('tuneempty').hidden = !!sel; $('tunebody').hidden = !sel;
+    if (!sel) { $('tuneh').textContent = 'Sound'; return; }
+    const s = sel.snd;
+    $('tuneh').textContent = 'Sound of ' + (sel.chord ? 'leaf ' + sel.chord.map(label).join(' ') : 'post ' + label(sel.s));
+    $('s-shape').value = s.shape; $('s-filter').value = s.filter;
+    $('s-cut').value = cutPos(s.cutoff); $('s-q').value = qPos(s.q);
+    $('s-vol').value = s.vol * 100; $('s-verb').value = s.verb * 100;
+    const off = s.filter === 'none'; $('s-cut').disabled = off; $('s-q').disabled = off;
+    $('s-cutv').textContent = s.cutoff >= 1000 ? (s.cutoff / 1000).toFixed(1) + ' kHz' : Math.round(s.cutoff) + ' Hz';
+    $('s-qv').textContent = 'Q ' + s.q.toFixed(1);
+    $('s-volv').textContent = Math.round(s.vol * 100) + '%';
+    $('s-verbv').textContent = Math.round(s.verb * 100) + '%';
+  }
+  const tuneInput = (id, fn) => $(id).addEventListener('input', e => { if (!sel) return; fn(sel.snd, e.target.value); renderTune(); });
+  tuneInput('s-shape', (s, v) => { s.shape = v; });
+  tuneInput('s-filter', (s, v) => { s.filter = v; });
+  tuneInput('s-cut', (s, v) => { s.cutoff = cutHz(+v); });
+  tuneInput('s-q', (s, v) => { s.q = qOf(+v); });
+  tuneInput('s-vol', (s, v) => { s.vol = +v / 100; });
+  tuneInput('s-verb', (s, v) => { s.verb = +v / 100; });
+  $('s-all').onclick = () => { if (!sel) return; for (const o of [...posts, ...leaves]) if (o !== sel) o.snd = { ...sel.snd }; };
+  $('m-vol').oninput = e => { masterVol = +e.target.value / 100; };
+  $('m-room').oninput = e => { room = +e.target.value / 10; $('m-roomv').textContent = room.toFixed(1) + ' s'; };
+  $('m-room').onchange = () => { if (actx) makeRoom(room); };
 
   const TOOLS = ['wall', 'post', 'leaf', 'erase'];
   function setTool(n) {
@@ -642,9 +729,11 @@ table.mx th { color: var(--muted); font-weight: 500; }
     const c = cellAt(ev); if (!c) return;
     if (tool === 'post' || tool === 'leaf') {
       if (!first || wall[c[1] * W + c[0]]) return;
-      if (tool === 'post') posts.push({ x: c[0], y: c[1], s: (octave - 4) * 12 + note, muted: false, t0: t });
-      else leaves.push({ id: nextLeaf++, x: c[0], y: c[1], chord: [...chord].sort((a, b) => a - b), muted: false, t0: t, trail: [] });
-      changed(); return;
+      const made = tool === 'post'
+        ? { id: nextId++, x: c[0], y: c[1], s: (octave - 2) * 12 + note, muted: false, t0: t, snd: DEF_SND() }
+        : { id: nextId++, x: c[0], y: c[1], chord: [...chord].sort((a, b) => a - b), muted: false, t0: t, trail: [], snd: DEF_SND() };
+      (tool === 'post' ? posts : leaves).push(made);
+      sel = made; changed(); renderTune(); return;
     }
     let wallsChanged = false;
     if (first) { anchor = last = c; wallsChanged = dab(c[0], c[1]); }
@@ -682,44 +771,51 @@ table.mx th { color: var(--muted); font-weight: 500; }
   function box(x0, y0, x1, y1) { for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) wall[y * W + x] = 1; }
   function loadPreset(name) {
     wall = new Uint8Array(N); posts = []; leaves = []; layers = new Map(); notes = new Map(); t = 0;
-    const P = (x, y, s) => posts.push({ x, y, s, muted: false, t0: 0 });
+    const P = (x, y, s) => posts.push({ id: nextId++, x, y, s, muted: false, t0: 0, snd: DEF_SND() });
+    sel = null;
     if (name === 'courtyard') {
       // a walled yard with a gate in the south wall; a C major triad inside, a clashing F# outside
       box(52, 22, 108, 23); box(52, 76, 74, 77); box(86, 76, 108, 77); box(52, 22, 53, 77); box(107, 22, 108, 77);
       box(70, 40, 71, 58);  // an inner wall to cast a shadow
-      P(84, 46, 0); P(84, 52, 4); P(90, 49, 7);
-      P(80, 92, 6);
-    } else if (name === 'fifth') { P(55, 50, 0); P(105, 50, 7); }
-    else if (name === 'semitone') { P(55, 50, 0); P(105, 50, 1); }
+      P(84, 46, 24); P(84, 52, 28); P(90, 49, 31);
+      P(80, 92, 30);
+    } else if (name === 'fifth') { P(55, 50, 24); P(105, 50, 31); }
+    else if (name === 'semitone') { P(55, 50, 24); P(105, 50, 25); }
     else if (name === 'corridor') {
       box(20, 40, 140, 41); box(20, 58, 140, 59); box(139, 40, 140, 59);
-      P(130, 49, 0); P(30, 49, 7);
+      P(130, 49, 24); P(30, 49, 31);
     }
     rebuild(); changed(); gWater = gS = gR = 1e-3;
   }
 
   // ---------- keep the map across reloads and updates ----------
   // walls, posts and leaves are saved in this browser every second they change, and come back on reload
-  const KEY = 'fds-map-v1';
+  const KEY = 'fds-map-v2', OLD_KEY = 'fds-map-v1';
   let savedSig = '';
   function saveMap() {
     const w = []; for (let i = 0; i < N; i++) if (wall[i]) w.push(i);
     const sig = JSON.stringify({
-      w, p: posts.map(p => [p.x, p.y, p.s, p.muted ? 1 : 0]),
-      l: leaves.map(l => [Math.round(l.x * 10) / 10, Math.round(l.y * 10) / 10, l.chord, l.muted ? 1 : 0])
+      w, p: posts.map(p => [p.x, p.y, p.s, p.muted ? 1 : 0, p.snd]),
+      l: leaves.map(l => [Math.round(l.x * 10) / 10, Math.round(l.y * 10) / 10, l.chord, l.muted ? 1 : 0, l.snd])
     });
     if (sig === savedSig) return;
     try { localStorage.setItem(KEY, sig); savedSig = sig; } catch (e) {}
   }
   function restoreMap() {
     let raw = null;
-    try { raw = localStorage.getItem(KEY); } catch (e) {}
+    let old = false;
+    try { raw = localStorage.getItem(KEY); if (!raw) { raw = localStorage.getItem(OLD_KEY); old = !!raw; } } catch (e) {}
     if (!raw) return false;
     try {
       const d = JSON.parse(raw);
+      if (old) {   // maps saved before octaves 2 and 3 existed counted notes from C4
+        d.p = d.p.map(p => { p[2] += 24; return p; });
+        d.l = (d.l || []).map(l => { l[2] = l[2].map(n => n + 24); return l; });
+        raw = '';
+      }
       wall = new Uint8Array(N); for (const i of d.w) if (i >= 0 && i < N) wall[i] = 1;
-      posts = d.p.map(([x, y, s, m]) => ({ x, y, s, muted: !!m, t0: 0 }));
-      leaves = (d.l || []).map(([x, y, c, m]) => ({ id: nextLeaf++, x, y, chord: c, muted: !!m, t0: 0, trail: [] }));
+      posts = d.p.map(([x, y, s, m, snd]) => ({ id: nextId++, x, y, s, muted: !!m, t0: 0, snd: { ...DEF_SND(), ...(snd || {}) } }));
+      leaves = (d.l || []).map(([x, y, c, m, snd]) => ({ id: nextId++, x, y, chord: c, muted: !!m, t0: 0, trail: [], snd: { ...DEF_SND(), ...(snd || {}) } }));
       layers = new Map(); notes = new Map(); t = 0;
       rebuild(); changed();
       savedSig = raw; return true;
