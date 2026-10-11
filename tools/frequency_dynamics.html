@@ -159,6 +159,7 @@ details[open] { display: grid; gap: 8px; }
           <button id="v-harm" aria-pressed="true">Consonance</button>
           <button id="v-turb" aria-pressed="false">Dissonance</button>
           <button id="v-colour" aria-pressed="false">Source colour</button>
+          <button id="v-liquid" aria-pressed="false">Liquid</button>
         </div>
         <span class="spacer"></span>
         <div class="seg" role="group" aria-label="Toggles">
@@ -745,6 +746,49 @@ details[open] { display: grid; gap: 8px; }
     o = near < 0.5 ? vec4(uStone, 1.) : vec4(A.rgb * w.x + B.rgb * w.y + C.rgb * w.z, 1.);
   }`;
 
+  // Liquid: the field's height at every cell (all sources, all reflection orders added up)
+  const FS_HEIGHT = HEAD + `
+  uniform sampler2DArray uS; uniform sampler2D uInfo; uniform int uNL, uGEN;
+  void main() {
+    ivec2 p = ivec2(gl_FragCoord.xy); float v = 0.;
+    if (!wallAt(p)) for (int i = 0; i < uNL; i++) { int sl = int(texelFetch(uInfo, ivec2(i, 1), 0).x) * uGEN; for (int g = 0; g < uGEN; g++) v += texelFetch(uS, ivec3(p, sl + g), 0).r; }
+    o = vec4(v, 0., 0., 1.);
+  }`;
+  // ...then each screen pixel is lit as a surface: the height is blended smoothly across the hexagon lattice, its slope
+  // tips the surface, and a sun from the top left, a soft sky and a glint off the crests do the rest
+  const FS_LIQUID = `#version 300 es
+  precision highp float; precision highp int; precision highp sampler2D;
+  uniform sampler2D uH, uWall, uView; uniform ivec2 uSize; uniform vec2 uCanvas, uPhys;
+  uniform vec3 uStone, uDeep, uCrest; uniform float uGain, uRelief; uniform int uTint; out vec4 o;
+  const float S3 = 0.8660254;
+  ivec2 cellOf(ivec2 ax) { int r = ax.y; return clamp(ivec2(ax.x + (r - (r & 1)) / 2, r), ivec2(0), uSize - 1); }
+  void tri(vec2 P, out ivec2 a, out ivec2 b, out ivec2 c, out vec3 w) {
+    float r = P.y / S3, q = P.x - 0.5 * r, q0 = floor(q), r0 = floor(r), fq = q - q0, fr = r - r0;
+    if (fq + fr < 1.) { a = ivec2(q0, r0); b = ivec2(q0 + 1., r0); c = ivec2(q0, r0 + 1.); w = vec3(1. - fq - fr, fq, fr); }
+    else { a = ivec2(q0 + 1., r0 + 1.); b = ivec2(q0, r0 + 1.); c = ivec2(q0 + 1., r0); w = vec3(fq + fr - 1., 1. - fq, 1. - fr); }
+  }
+  float hAt(ivec2 ax) { return texelFetch(uH, cellOf(ax), 0).r; }
+  float height(vec2 P) { ivec2 a, b, c; vec3 w; tri(P, a, b, c, w); return dot(w, vec3(hAt(a), hAt(b), hAt(c))) / uGain; }
+  void main() {
+    vec2 P = vec2(gl_FragCoord.x / uCanvas.x * uPhys.x - 0.5, (uCanvas.y - gl_FragCoord.y) / uCanvas.y * uPhys.y - 0.5);
+    ivec2 a, b, c; vec3 w; tri(P, a, b, c, w);
+    ivec2 nearest = w.x >= w.y && w.x >= w.z ? a : (w.y >= w.z ? b : c);
+    if (texelFetch(uWall, cellOf(nearest), 0).r > 0.5) { o = vec4(uStone, 1.); return; }
+    float e = 0.5, h = height(P);
+    vec3 n = normalize(vec3(-(height(P + vec2(e, 0.)) - height(P - vec2(e, 0.))) / (2. * e) * uRelief,
+                            -(height(P + vec2(0., e)) - height(P - vec2(0., e))) / (2. * e) * uRelief, 1.));
+    vec3 L = normalize(vec3(-0.55, -0.6, 0.6)), V = vec3(0., 0., 1.), Hh = normalize(L + V);
+    float diff = max(dot(n, L), 0.), spec = pow(max(dot(n, Hh), 0.), 90.), fres = pow(1. - n.z, 2.);
+    vec3 R = reflect(-V, n);
+    vec3 sky = mix(uCrest, uDeep * 0.6, clamp(0.5 + 0.9 * R.y, 0., 1.));   // light above-left, dark toward the bottom
+    vec3 base = mix(uDeep, uCrest, clamp(0.32 + 0.22 * h, 0., 1.));
+    if (uTint == 1) { vec3 tc = texelFetch(uView, cellOf(a), 0).rgb * w.x + texelFetch(uView, cellOf(b), 0).rgb * w.y + texelFetch(uView, cellOf(c), 0).rgb * w.z;
+                      vec3 hue = tc / max(0.04, max(tc.r, max(tc.g, tc.b)));   // the wave colour's hue; the lighting supplies the brightness
+                      base = mix(base, hue * (0.3 + 0.35 * clamp(0.5 + 0.5 * h, 0., 1.)), 0.75); }
+    vec3 col = base * (0.28 + 0.72 * diff) + sky * fres * 0.9 + vec3(1.) * spec * 1.1;
+    o = vec4(col, 1.);
+  }`;
+
   // the numbers the picture's brightness is scaled against, on a coarse grid of the map
   const FS_METRIC = HEAD + READ + `
   uniform ivec2 uGrid;
@@ -780,7 +824,7 @@ details[open] { display: grid; gap: 8px; }
     for (let i = 0; i < n; i++) { const a = gl.getActiveUniform(p, i); u[a.name.replace(/\[0\]$/, '')] = gl.getUniformLocation(p, a.name); }
     return { p, u: new Proxy(u, { get: (o, k) => o[k] ?? null }) };
   }
-  let P_STEP, P_GHOST, P_VIEW, P_PRESENT, viewTex, P_METRIC, P_SAMPLE, fbo, fbo2, S0, SC, wallTex, infoTex, lutTex, pairsTex, ptsTex, metricTex, sampleTex;
+  let P_STEP, P_GHOST, P_VIEW, P_PRESENT, P_HEIGHT, P_LIQUID, heightTex, viewTex, P_METRIC, P_SAMPLE, fbo, fbo2, S0, SC, wallTex, infoTex, lutTex, pairsTex, ptsTex, metricTex, sampleTex;
   function texParams(target) {
     gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -788,7 +832,7 @@ details[open] { display: grid; gap: 8px; }
   function tex2D(fmt, w, h) { const x = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, x); gl.texStorage2D(gl.TEXTURE_2D, 1, fmt, w, h); texParams(gl.TEXTURE_2D); return x; }
   function texArray(depth) { const x = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D_ARRAY, x); gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RG32F, W, H, depth); if (gl.getError() === gl.OUT_OF_MEMORY) { gl.deleteTexture(x); throw new Error('gpu memory'); } texParams(gl.TEXTURE_2D_ARRAY); return x; }
   function initGPU() {
-    P_STEP = program(FS_STEP); P_GHOST = program(FS_GHOST); P_VIEW = program(FS_VIEW); P_PRESENT = program(FS_PRESENT); P_DIST = program(FS_DIST); P_DCOPY = program(FS_DCOPY);
+    P_STEP = program(FS_STEP); P_GHOST = program(FS_GHOST); P_VIEW = program(FS_VIEW); P_PRESENT = program(FS_PRESENT); P_DIST = program(FS_DIST); P_DCOPY = program(FS_DCOPY); P_HEIGHT = program(FS_HEIGHT); P_LIQUID = program(FS_LIQUID);
     gl.useProgram(P_DIST.p);
     gl.uniform2iv(P_DIST.u.MV, MOVES.flatMap(m => m.m)); gl.uniform1fv(P_DIST.u.ML, MOVES.map(m => m.len));
     gl.uniform1iv(P_DIST.u.MN, MOVES.map(m => m.mids.length)); gl.uniform2iv(P_DIST.u.MI, MOVES.flatMap(m => [0, 1, 2, 3].flatMap(j => m.mids[j] || [0, 0]))); P_METRIC = program(FS_METRIC); P_SAMPLE = program(FS_SAMPLE);
@@ -805,7 +849,7 @@ details[open] { display: grid; gap: 8px; }
   const FIELD_BUDGET = 1.25e9;   // bytes; past this the browser may refuse or drop the graphics context
   const fieldBytes = slots => W * H * 8 * (slots * GEN + GEN);
   function allocField(slots = 8) {
-    for (const x of [S0, SC, wallTex, viewTex]) if (x) gl.deleteTexture(x);
+    for (const x of [S0, SC, wallTex, viewTex, heightTex]) if (x) gl.deleteTexture(x);
     S0 = SC = null;
     cap = Math.min(MAXL, Math.max(8, Math.ceil(slots / 8) * 8));
     try {
@@ -821,7 +865,7 @@ details[open] { display: grid; gap: 8px; }
       }
       cap = 8; S0 = texArray(cap); SC = texArray(1); setTimeout(gpuFull, 0);
     }
-    wallTex = tex2D(gl.R8, W, H); viewTex = tex2D(gl.RGBA8, W, H);
+    wallTex = tex2D(gl.R8, W, H); viewTex = tex2D(gl.RGBA8, W, H); heightTex = tex2D(gl.R32F, W, H);
     distSize = 0;   // the distance maps are remade at the new size
     for (let sl = 0; sl < cap * GEN; sl++) clearSlice(S0, sl);
     uploadWalls();
@@ -1246,22 +1290,38 @@ details[open] { display: grid; gap: 8px; }
   const rgb = c => `rgb(${c.map(Math.round)})`;
   let colourWaves = false;
   try { colourWaves = localStorage.getItem('fds-colour-waves') === '1'; } catch (e) {}
-  const VIEW_ID = { water: 0, harm: 1, turb: 2, colour: 3 };
+  const VIEW_ID = { water: 0, harm: 1, turb: 2, colour: 3, liquid: 3 };   // liquid tints itself with the source-colour picture
 
   function draw() {
     if (GPU_OK) {
+      const liquid = view === 'liquid';
       target(viewTex); gl.viewport(0, 0, W, H);
       gl.useProgram(P_VIEW.p); bindRead(P_VIEW);
       const u = P_VIEW.u, c3 = (name, c) => gl.uniform3f(u[name], c[0] / 255, c[1] / 255, c[2] / 255);
       gl.uniform1i(u.uView, VIEW_ID[view]); gl.uniform1i(u.uCW, colourWaves ? 1 : 0);
       gl.uniform1f(u.uGW, gWater); gl.uniform1f(u.uGS, gS); gl.uniform1f(u.uGR, gR); gl.uniform1f(u.uGC, gColour);
       c3('uDeep', COL.deep); c3('uCrest', COL.crest); c3('uCalm', COL.calm); c3('uTurb', COL.turb); c3('uBg', COL.bg);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (!liquid || colourWaves) gl.drawArrays(gl.TRIANGLES, 0, 3);
+      if (liquid) {
+        target(heightTex); gl.useProgram(P_HEIGHT.p);
+        bindTex(P_HEIGHT, 'uS', 0, S0, gl.TEXTURE_2D_ARRAY); bindTex(P_HEIGHT, 'uWall', 1, wallTex); bindTex(P_HEIGHT, 'uInfo', 2, infoTex);
+        gl.uniform2i(P_HEIGHT.u.uSize, W, H); gl.uniform1i(P_HEIGHT.u.uNL, order.length); gl.uniform1i(P_HEIGHT.u.uGEN, GEN);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, glcv.width, glcv.height);
+        const q = P_LIQUID.u, f3 = (name, c) => gl.uniform3f(q[name], c[0] / 255, c[1] / 255, c[2] / 255);
+        gl.useProgram(P_LIQUID.p);
+        bindTex(P_LIQUID, 'uH', 0, heightTex); bindTex(P_LIQUID, 'uWall', 1, wallTex); bindTex(P_LIQUID, 'uView', 2, viewTex);
+        gl.uniform2i(q.uSize, W, H); gl.uniform2f(q.uCanvas, glcv.width, glcv.height); gl.uniform2f(q.uPhys, PW(), PH());
+        f3('uStone', COL.stone); f3('uDeep', COL.deep); f3('uCrest', COL.crest);
+        gl.uniform1f(q.uGain, gWater); gl.uniform1f(q.uRelief, 1.6 * gridK); gl.uniform1i(q.uTint, colourWaves ? 1 : 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      } else {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, glcv.width, glcv.height);
       gl.useProgram(P_PRESENT.p); bindTex(P_PRESENT, 'uView', 0, viewTex);
       gl.uniform2i(P_PRESENT.u.uSize, W, H); gl.uniform2f(P_PRESENT.u.uCanvas, glcv.width, glcv.height); gl.uniform2f(P_PRESENT.u.uPhys, PW(), PH());
       gl.uniform3f(P_PRESENT.u.uStone, COL.stone[0] / 255, COL.stone[1] / 255, COL.stone[2] / 255);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
+      }
     }
     // the overlay: the straight run being drawn, sources and drifters
     const scr = (px, py) => [(px + 0.5) * cell, (py + 0.5) * cell];
@@ -1612,10 +1672,11 @@ details[open] { display: grid; gap: 8px; }
     water: '<span class="swatch sw-water"></span>the raw field: trough to crest, all sources added together',
     harm: '<span class="swatch sw-harm"></span>consonant to dissonant, brightness is intensity',
     turb: '<span class="swatch" style="background:linear-gradient(90deg,var(--deep),var(--turb))"></span>dissonance only',
-    colour: '<span class="swatch" style="background:linear-gradient(90deg,#e8606a,#e8c060,#60e8a0,#60a8e8,#b060e8)"></span>the full field, crests coloured by the source making them'
+    colour: '<span class="swatch" style="background:linear-gradient(90deg,#e8606a,#e8c060,#60e8a0,#60a8e8,#b060e8)"></span>the full field, crests coloured by the source making them',
+    liquid: '<span class="swatch" style="background:linear-gradient(90deg,#07202a,#5fa8b0,#f4fbfc)"></span>the field as a lit liquid surface; with Colour waves on it takes the wave colours'
   };
-  function setView(n) { view = n; ['water', 'harm', 'turb', 'colour'].forEach(k => document.getElementById('v-' + k).setAttribute('aria-pressed', k === n ? 'true' : 'false')); document.getElementById('leg').innerHTML = LEG[n]; }
-  ['water', 'harm', 'turb', 'colour'].forEach(k => document.getElementById('v-' + k).onclick = () => setView(k));
+  function setView(n) { view = n; ['water', 'harm', 'turb', 'colour', 'liquid'].forEach(k => document.getElementById('v-' + k).setAttribute('aria-pressed', k === n ? 'true' : 'false')); document.getElementById('leg').innerHTML = LEG[n]; }
+  ['water', 'harm', 'turb', 'colour', 'liquid'].forEach(k => document.getElementById('v-' + k).onclick = () => setView(k));
   const run$ = document.getElementById('run');
   run$.onclick = () => { running = !running; run$.textContent = running ? 'Pause' : 'Run'; };
   document.getElementById('reset').onclick = resetWaves;
