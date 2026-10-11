@@ -221,6 +221,8 @@ details[open] { display: grid; gap: 8px; }
         <p class="hint" id="tuneempty">Press Tune on anything in the list to shape its sound and wave colours.</p>
         <div id="tunebody" hidden>
           <div class="tune">
+            <h3>In the water</h3>
+            <div class="ctl"><label for="s-vol">Strength</label><input id="s-vol" type="range" min="-40" max="12" step="1" value="0"><span class="val" id="s-volv"></span></div>
             <div id="pitchbox" class="tune">
               <h3 class="h3row">Pitch <span class="val" id="s-pitchv"></span></h3>
               <div class="ctl wide"><label for="s-pitch" id="s-pitchl">Octave 4</label><input id="s-pitch" type="range" min="0" max="1200" step="1" value="0"></div>
@@ -233,7 +235,6 @@ details[open] { display: grid; gap: 8px; }
               <select id="s-filter"><option value="none">Off</option><option value="lowpass">Low pass</option><option value="bandpass">Band pass</option><option value="highpass">High pass</option></select><span></span></div>
             <div class="ctl"><label for="s-cut">Cutoff</label><input id="s-cut" type="range" min="0" max="100" value="60"><span class="val" id="s-cutv"></span></div>
             <div class="ctl"><label for="s-q">Resonance</label><input id="s-q" type="range" min="0" max="100" value="20"><span class="val" id="s-qv"></span></div>
-            <div class="ctl"><label for="s-vol">Volume</label><input id="s-vol" type="range" min="0" max="200" value="100"><span class="val" id="s-volv"></span></div>
             <div class="ctl"><label for="s-verb">Reverb</label><input id="s-verb" type="range" min="0" max="100" value="25"><span class="val" id="s-verbv"></span></div>
             <button id="s-all" class="quiet">Use this sound on everything</button>
 
@@ -280,7 +281,7 @@ details[open] { display: grid; gap: 8px; }
           <p class="hint">Real time runs the clock at a hundredth of true pitch: A4 vibrates 4.40 times a second and every note at its own true rate. A cell is then about 7 cm and the map an 11 m room.</p>
           <p class="hint">Air loss grows with the square of the frequency, so highs fade over distance far faster than lows: B5 loses about 14 times what C4 does. Low notes also bend around walls more, straight out of their longer waves.</p>
           <p class="hint">With a hard edge and no air loss nothing ever leaves the map. Sound trapped behind hard walls rings on until air loss takes it.</p>
-          <p class="hint">Sound and colour settings change what you hear and see only. The clash maths and the leaves always use the field's own 8-overtone tone.</p>
+          <p class="hint">Strength is how hard a source pushes the water, in dB: it changes how far it carries, how much it weighs in a clash and how it pulls on leaves, and you hear it too. The other Sound and colour settings change what you hear and see only; the clash maths and the leaves always use the field's own 8-overtone tone.</p>
         </details>
       </div>
     </aside>
@@ -453,6 +454,9 @@ details[open] { display: grid; gap: 8px; }
     for (const src of [...posts, ...leaves]) {
       const target = src.muted ? 0 : 1, env = src.env || 0;
       src.env = Math.abs(target - env) < 1 / RAMP ? target : env + Math.sign(target - env) / RAMP;
+      // strength glides to a new setting too, so a slider move never cracks the water like a whip
+      const want = src.snd ? src.snd.vol : 1;
+      src.volNow = src.volNow === undefined ? want : src.volNow + (want - src.volNow) / 40;
     }
     for (const L of layers.values()) {
       const u = L.u, up = L.up, un = L.un, e = L.e;
@@ -468,8 +472,10 @@ details[open] { display: grid; gap: 8px; }
       // area with nowhere to drain it the whole region slowly rose or sank: a silent offset that looked and sounded
       // like the note was everywhere. Same loudness as before.
       L.phase = (L.phase || 0) + L.omega;   // a running phase, so a pitch change glides instead of jumping
-      const src = L.src, f = (src.env || 0) * Math.cos(L.phase);
-      un[src.chord ? leafCell(src) : src.y * W + src.x] += AMP * (L.fPrev - f) / L.omega;
+      // strength, the fade envelope and the 1/omega loudness scaling all live inside f, so changing any of them
+      // mid-song still adds no net water
+      const src = L.src, f = (src.env || 0) * (src.volNow === undefined ? 1 : src.volNow) * Math.cos(L.phase) / L.omega;
+      un[src.chord ? leafCell(src) : src.y * W + src.x] += AMP * (L.fPrev - f);
       L.fPrev = f;
       L.up = u; L.u = un; L.un = up;
       const nu = L.u;
@@ -738,7 +744,7 @@ details[open] { display: grid; gap: 8px; }
       applySettings(v, snd, now);
       v.o.frequency.setTargetAtTime(freqHz(L.s), now, 0.02);
       const A = here && !L.src.muted ? Math.sqrt(2 * L.e[hover]) : 0;
-      v.g.gain.setTargetAtTime(Math.min(1, Math.sqrt(A / gS)) * share * snd.vol, now, 0.06);
+      v.g.gain.setTargetAtTime(Math.min(1, Math.sqrt(A / gS)) * share, now, 0.06);   // strength is already in A
     }
     for (const [k, v] of voices) if (!layers.has(k)) { v.g.gain.setTargetAtTime(0, now, 0.03); v.o.stop(now + 0.2); voices.delete(k); }
     master.gain.setTargetAtTime(masterVol, now, 0.05);
@@ -895,11 +901,11 @@ details[open] { display: grid; gap: 8px; }
     renderLook(); renderPitch();
     $('s-shape').value = s.shape; $('s-filter').value = s.filter;
     $('s-cut').value = cutPos(s.cutoff); $('s-q').value = qPos(s.q);
-    $('s-vol').value = s.vol * 100; $('s-verb').value = s.verb * 100;
+    $('s-vol').value = s.vol > 0 ? Math.max(-40, Math.round(20 * Math.log10(s.vol))) : -40; $('s-verb').value = s.verb * 100;
     const off = s.filter === 'none'; $('s-cut').disabled = off; $('s-q').disabled = off;
     $('s-cutv').textContent = s.cutoff >= 1000 ? (s.cutoff / 1000).toFixed(1) + ' kHz' : Math.round(s.cutoff) + ' Hz';
     $('s-qv').textContent = 'Q ' + s.q.toFixed(1);
-    $('s-volv').textContent = Math.round(s.vol * 100) + '%';
+    { const db = s.vol > 0 ? Math.round(20 * Math.log10(s.vol)) : -40; $('s-volv').textContent = db <= -40 ? 'silent' : (db > 0 ? '+' : '') + db + ' dB'; }
     $('s-verbv').textContent = Math.round(s.verb * 100) + '%';
   }
   const tuneInput = (id, fn) => $(id).addEventListener('input', e => { if (!sel) return; fn(sel.snd, e.target.value); renderTune(); });
@@ -907,9 +913,10 @@ details[open] { display: grid; gap: 8px; }
   tuneInput('s-filter', (s, v) => { s.filter = v; });
   tuneInput('s-cut', (s, v) => { s.cutoff = cutHz(+v); });
   tuneInput('s-q', (s, v) => { s.q = qOf(+v); });
-  tuneInput('s-vol', (s, v) => { s.vol = +v / 100; });
+  tuneInput('s-vol', (s, v) => { s.vol = +v <= -40 ? 0 : Math.pow(10, +v / 20); });
   tuneInput('s-verb', (s, v) => { s.verb = +v / 100; });
-  $('s-all').onclick = () => { if (!sel) return; for (const o of [...posts, ...leaves]) if (o !== sel) { const look = o.snd.look; o.snd = { ...sel.snd, look }; } };
+  // copying a sound leaves each source's strength and colours alone
+  $('s-all').onclick = () => { if (!sel) return; for (const o of [...posts, ...leaves]) if (o !== sel) { const look = o.snd.look, vol = o.snd.vol; o.snd = { ...sel.snd, look, vol }; } };
 
   // ---------- wave colours for the selected source ----------
   let slotSel = 0;
