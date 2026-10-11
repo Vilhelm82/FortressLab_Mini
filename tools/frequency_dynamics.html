@@ -290,6 +290,7 @@ details[open] { display: grid; gap: 8px; }
           <p class="hint">Absorption grows with the square of the frequency, so highs fade over distance far faster than lows: B5 loses about 14 times what C4 does. Low notes also bend around walls more, straight out of their longer waves.</p>
           <p class="hint">Waveform is physical. A source sends out its fundamental and each harmonic of its waveform as separate waves: square has the odd harmonics at 1/n, saw every harmonic at 1/n, triangle the odd ones at 1/n², sine none. Shorter harmonics bend round walls less and fade faster, so a bright waveform goes dull behind walls and over distance. Harmonics too short for the grid are left out; a finer resolution keeps more.</p>
           <p class="hint">Roughness is measured where you are, from the harmonics that actually arrive there. The table shows it at the sources; behind a wall the same two notes may agree better, because the wall has stripped the harmonics that grated. You hear the same thing: listening plays every harmonic at the strength it arrives.</p>
+          <p class="hint">The grid is hexagonal: every cell has six neighbours at the same distance, so waves travel at nearly the same speed in every direction. On a square grid short waves ran faster along the axes than across them, which drew a four-armed star around high notes.</p>
           <p class="hint">The field is computed on your graphics card. It holds up to 64 waves: every harmonic of every note is its own wave.</p>
           <p class="hint">Reflections splits every source's field by reflection order. Each order's walls absorb the waves that hit them and hand the same reflection a reflective wall makes to the next order, so direct sound casts true shadows and each order can be seen on its own. Added back together they are exactly the full field. The map boundary is not counted as a reflection.</p>
           <p class="hint">With a reflective boundary and no absorption nothing ever leaves the map. Sound trapped behind walls rings on until absorption takes it.</p>
@@ -308,11 +309,15 @@ details[open] { display: grid; gap: 8px; }
   const BASE_W = 160, BASE_H = 100, BASE_LAMBDA = 11, MIN_WAVE_CELLS = 3.6;
   let gridK = 1;
   try { gridK = Math.max(1, Math.min(6, +localStorage.getItem('fds-grid') || 1)); } catch (e) {}
+  // The grid is hexagonal: every cell has six neighbours at the same distance, so waves travel at the same speed in
+  // every direction (a square grid lets short waves run faster along its axes than across them). Cells sit in rows;
+  // odd rows are shifted half a cell right and rows are sqrt(3)/2 apart. Distances are in cell spacings.
+  const S3 = Math.sqrt(3) / 2;
   let W, H, N, LAMBDA_A4, SPONGE, EMA, OMEGA_REF, LEAF_R;
   const WAVE_C = 0.5, C2 = WAVE_C * WAVE_C;   // waves travel half a cell a step, inside the 2D stability limit
   const SMAX = 0.16, AMP = 0.6, RAMP = 120;
   function applyGrid(k) {
-    gridK = k; W = BASE_W * k; H = BASE_H * k; N = W * H;
+    gridK = k; W = BASE_W * k; H = Math.round(BASE_H * k / S3); N = W * H;
     LAMBDA_A4 = BASE_LAMBDA * k;          // wavelength of A4 in cells; every other note keeps the true ratio
     SPONGE = 18 * k;                      // wide enough to soak up long bass waves at an open edge
     EMA = 0.012 / k;                      // strength is averaged over the same stretch of real time at any grid
@@ -320,6 +325,19 @@ details[open] { display: grid; gap: 8px; }
     LEAF_R = 2 * k;                       // how far either side a leaf feels the slope of the water
   }
   applyGrid(gridK);
+  // a cell's centre on the map, and the cell nearest a point (unclamped)
+  const physOf = (x, y) => [x + 0.5 * (y & 1), y * S3];
+  function hexAt(px, py) {
+    const q = px - 0.5 * py / S3, r = py / S3, y3 = -q - r;
+    let rq = Math.round(q), rr = Math.round(r); const ry = Math.round(y3);
+    const dq = Math.abs(rq - q), dr = Math.abs(rr - r), dy = Math.abs(ry - y3);
+    if (dq > dy && dq > dr) rq = -ry - rr; else if (!(dy > dr)) rr = -rq - ry;
+    return [rq + (rr - (rr & 1)) / 2, rr];
+  }
+  const inGrid = (x, y) => x >= 0 && y >= 0 && x < W && y < H;
+  // the cell index at a point on the map, or -1 off the map
+  const idxAt = (px, py) => { const [x, y] = hexAt(px, py); return inGrid(x, y) ? y * W + x : -1; };
+  const PW = () => W + 0.5, PH = () => (H - 1) * S3 + 1;   // the map's size on screen, in cell spacings
   const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
   const css = getComputedStyle(document.documentElement);
@@ -501,7 +519,18 @@ details[open] { display: grid; gap: 8px; }
   uniform ivec2 uSize; uniform sampler2D uWall; out vec4 o;
   bool wallAt(ivec2 q) { return texelFetch(uWall, q, 0).r > 0.5; }
   bool inside(ivec2 q) { return q.x >= 0 && q.y >= 0 && q.x < uSize.x && q.y < uSize.y; }
-  const ivec2 D4[4] = ivec2[4](ivec2(-1,0), ivec2(1,0), ivec2(0,-1), ivec2(0,1));
+  const float S3 = 0.8660254;
+  // the six neighbours of a hexagonal cell; odd rows sit half a cell to the right
+  ivec2 nb(ivec2 p, int k) {
+    int o = p.y & 1;
+    if (k == 0) return p + ivec2(-1, 0);
+    if (k == 1) return p + ivec2(1, 0);
+    if (k == 2) return p + ivec2(o - 1, -1);
+    if (k == 3) return p + ivec2(o, -1);
+    if (k == 4) return p + ivec2(o - 1, 1);
+    return p + ivec2(o, 1);
+  }
+  vec2 phys(ivec2 p) { return vec2(float(p.x) + 0.5 * float(p.y & 1), float(p.y) * S3); }
   `;
 
   // one step of one layer: the wave update, the absorbing (or reflective) walls, the hand-over from the previous order
@@ -510,9 +539,10 @@ details[open] { display: grid; gap: 8px; }
   uniform float uAir, uSmax, uC2, uPush; uniform ivec2 uSrc;
   float sponge(ivec2 p) {
     if (!uOpen) return 0.;
-    int d = min(min(p.x, p.y), min(uSize.x - 1 - p.x, uSize.y - 1 - p.y));
-    if (d >= uSponge) return 0.;
-    float f = float(uSponge - d) / float(uSponge); return uSmax * f * f;
+    vec2 q = phys(p);
+    float d = min(min(q.x, q.y), min(float(uSize.x) - 0.5 - q.x, float(uSize.y - 1) * S3 - q.y)), w = float(uSponge);
+    if (d >= w) return 0.;
+    float f = (w - d) / w; return uSmax * f * f;
   }
   void main() {
     ivec2 p = ivec2(gl_FragCoord.xy);
@@ -520,8 +550,8 @@ details[open] { display: grid; gap: 8px; }
     if (wallAt(p)) { o = vec4(c.r, c.g, 0., 0.); return; }      // a wall cell carries this layer's boundary value
     float u = c.r, up = c.g, lap = 0.;
     float prevU = uPrev >= 0 ? texelFetch(uS, ivec3(p, uPrev), 0).r : 0.;
-    for (int k = 0; k < 4; k++) {
-      ivec2 q = p + D4[k];
+    for (int k = 0; k < 6; k++) {
+      ivec2 q = nb(p, k);
       if (!inside(q)) continue;                                   // the map boundary mirrors: no slope across it
       if (wallAt(q)) {
         if (uMur) lap += texelFetch(uS, ivec3(q, uSlice), 0).r - u;                  // absorbing wall
@@ -529,7 +559,7 @@ details[open] { display: grid; gap: 8px; }
       } else lap += texelFetch(uS, ivec3(q, uSlice), 0).r - u;
     }
     float s = sponge(p) + uAir;
-    float un = (2. * u - (1. - s) * up + uC2 * lap) / (1. + s);
+    float un = (2. * u - (1. - s) * up + uC2 * (2. / 3.) * lap) / (1. + s);   // the hexagonal Laplacian is 2/3 of the neighbour sum
     if (p == uSrc) un += uPush;
     o = vec4(un, u, 0., 0.);
   }`;
@@ -543,8 +573,8 @@ details[open] { display: grid; gap: 8px; }
     if (!wallAt(p)) { o = c; return; }
     if (!uMur) { o = vec4(0.); return; }
     float sum = 0.; int n = 0;
-    for (int k = 0; k < 4; k++) {
-      ivec2 q = p + D4[k];
+    for (int k = 0; k < 6; k++) {
+      ivec2 q = nb(p, k);
       if (!inside(q) || wallAt(q)) continue;
       vec4 a = texelFetch(uS, ivec3(q, uSlice), 0);
       sum += a.g + uK * (a.r - c.r); n++;
@@ -567,7 +597,7 @@ details[open] { display: grid; gap: 8px; }
   // the colour of the wave of layer i passing through: which wave of its source's fundamental it belongs to
   vec3 waveCol(int i, ivec2 p, float u, float up) {
     vec4 a = info(i, 0), f = info(i, 2);
-    float d = length(vec2(p) - a.xy), n;
+    float d = length(phys(p) - a.xy), n;
     if (f.z < 1.5) {
       float w = a.w, geo = a.z - (w / 0.5) * d, psi = atan(u, (u - up) / w);
       float dd = mod(psi - geo + PI, TAU) - PI;
@@ -613,8 +643,8 @@ details[open] { display: grid; gap: 8px; }
   vec3 mixc(vec3 a, vec3 b, float k) { return a + (b - a) * k; }
   vec3 orderCol(int i, int g, ivec2 p, vec4 q) { return g == 0 ? waveCol(i, p, q.r, q.g) : lut(i, 11 + g); }
   void main() {
-    ivec2 p = ivec2(int(gl_FragCoord.x), uSize.y - 1 - int(gl_FragCoord.y));
-    if (wallAt(p)) { o = vec4(uBg, 1.); return; }
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    if (wallAt(p)) { o = vec4(uBg, 0.); return; }   // alpha 0 marks a wall for the present pass
     readCell(p);
     vec3 c, acc = vec3(0.); float ws = 0., absParts = 0.;
     float sgn = V >= 0. ? 1. : -1.;
@@ -690,6 +720,27 @@ details[open] { display: grid; gap: 8px; }
     o = vec4(c, 1.);
   }`;
 
+  // From cells to screen: each screen pixel falls in a triangle of three neighbouring cell centres and blends their
+  // colours by how close it is to each, so the field looks smooth. Walls are drawn as their own hexagons.
+  const FS_PRESENT = `#version 300 es
+  precision highp float; precision highp int; precision highp sampler2D;
+  uniform sampler2D uView; uniform ivec2 uSize; uniform vec2 uCanvas, uPhys; uniform vec3 uStone; out vec4 o;
+  const float S3 = 0.8660254;
+  vec4 cellCol(ivec2 ax) {   // axial (q, r) to the stored cell, clamped to the map
+    int r = ax.y, c = ax.x + (r - (r & 1)) / 2;
+    return texelFetch(uView, clamp(ivec2(c, r), ivec2(0), uSize - 1), 0);
+  }
+  void main() {
+    vec2 P = vec2(gl_FragCoord.x / uCanvas.x * uPhys.x - 0.5, (uCanvas.y - gl_FragCoord.y) / uCanvas.y * uPhys.y - 0.5);
+    float r = P.y / S3, q = P.x - 0.5 * r, q0 = floor(q), r0 = floor(r), fq = q - q0, fr = r - r0;
+    ivec2 a, b, c; vec3 w;
+    if (fq + fr < 1.) { a = ivec2(q0, r0); b = ivec2(q0 + 1., r0); c = ivec2(q0, r0 + 1.); w = vec3(1. - fq - fr, fq, fr); }
+    else { a = ivec2(q0 + 1., r0 + 1.); b = ivec2(q0, r0 + 1.); c = ivec2(q0 + 1., r0); w = vec3(fq + fr - 1., 1. - fq, 1. - fr); }
+    vec4 A = cellCol(a), B = cellCol(b), C = cellCol(c);
+    float near = w.x >= w.y && w.x >= w.z ? A.a : (w.y >= w.z ? B.a : C.a);
+    o = near < 0.5 ? vec4(uStone, 1.) : vec4(A.rgb * w.x + B.rgb * w.y + C.rgb * w.z, 1.);
+  }`;
+
   // the numbers the picture's brightness is scaled against, on a coarse grid of the map
   const FS_METRIC = HEAD + READ + `
   uniform ivec2 uGrid;
@@ -725,7 +776,7 @@ details[open] { display: grid; gap: 8px; }
     for (let i = 0; i < n; i++) { const a = gl.getActiveUniform(p, i); u[a.name.replace(/\[0\]$/, '')] = gl.getUniformLocation(p, a.name); }
     return { p, u: new Proxy(u, { get: (o, k) => o[k] ?? null }) };
   }
-  let P_STEP, P_GHOST, P_VIEW, P_METRIC, P_SAMPLE, fbo, fbo2, S0, S1, wallTex, infoTex, lutTex, pairsTex, ptsTex, metricTex, sampleTex;
+  let P_STEP, P_GHOST, P_VIEW, P_PRESENT, viewTex, P_METRIC, P_SAMPLE, fbo, fbo2, S0, S1, wallTex, infoTex, lutTex, pairsTex, ptsTex, metricTex, sampleTex;
   function texParams(target) {
     gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -733,7 +784,7 @@ details[open] { display: grid; gap: 8px; }
   function tex2D(fmt, w, h) { const x = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, x); gl.texStorage2D(gl.TEXTURE_2D, 1, fmt, w, h); texParams(gl.TEXTURE_2D); return x; }
   function texArray(depth) { const x = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D_ARRAY, x); gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RG32F, W, H, depth); if (gl.getError() === gl.OUT_OF_MEMORY) { gl.deleteTexture(x); throw new Error('gpu memory'); } texParams(gl.TEXTURE_2D_ARRAY); return x; }
   function initGPU() {
-    P_STEP = program(FS_STEP); P_GHOST = program(FS_GHOST); P_VIEW = program(FS_VIEW); P_METRIC = program(FS_METRIC); P_SAMPLE = program(FS_SAMPLE);
+    P_STEP = program(FS_STEP); P_GHOST = program(FS_GHOST); P_VIEW = program(FS_VIEW); P_PRESENT = program(FS_PRESENT); P_METRIC = program(FS_METRIC); P_SAMPLE = program(FS_SAMPLE);
     gl.bindVertexArray(gl.createVertexArray());
     fbo = gl.createFramebuffer(); fbo2 = gl.createFramebuffer();
     infoTex = tex2D(gl.RGBA32F, MAXL, 4); lutTex = tex2D(gl.RGBA32F, 15, MAXL); pairsTex = tex2D(gl.RGBA32F, MAXPAIRS, 1);
@@ -743,12 +794,11 @@ details[open] { display: grid; gap: 8px; }
   // The field at the current grid size, with room for `cap` slots; it starts flat. Room grows in steps of eight slots
   // as sources are added, so a few sources don't hold memory for 64.
   function allocField(slots = 8) {
-    for (const x of [S0, S1, wallTex]) if (x) gl.deleteTexture(x);
+    for (const x of [S0, S1, wallTex, viewTex]) if (x) gl.deleteTexture(x);
     cap = Math.min(MAXL, Math.max(8, Math.ceil(slots / 8) * 8));
     try { S0 = texArray(cap * GEN); S1 = texArray(cap * GEN); }
     catch (e) { if (S0) gl.deleteTexture(S0); cap = 8; S0 = texArray(cap * GEN); S1 = texArray(cap * GEN); setTimeout(gpuFull, 0); }
-    wallTex = tex2D(gl.R8, W, H);
-    glcv.width = W; glcv.height = H;
+    wallTex = tex2D(gl.R8, W, H); viewTex = tex2D(gl.RGBA8, W, H);
     for (let sl = 0; sl < cap * GEN; sl++) { clearSlice(S0, sl); clearSlice(S1, sl); }
     uploadWalls();
   }
@@ -833,7 +883,9 @@ details[open] { display: grid; gap: 8px; }
   }
 
   // ---------- the wave step ----------
-  const leafCell = l => [Math.round(l.x), Math.round(l.y)];
+  // drifters move freely across the map; they sing from the cell they are over
+  const leafCell = l => { const [x, y] = hexAt(l.x, l.y); return [Math.max(0, Math.min(W - 1, x)), Math.max(0, Math.min(H - 1, y))]; };
+  const srcPos = src => src.chord ? [src.x, src.y] : physOf(src.x, src.y);
   const PHASE_WRAP = 2 * Math.PI * 27720;   // whole cycles of every cycle length 1 to 12, so wrapping never shifts a wave colour
   function step() {
     // Each source fades its song in and out rather than switching it, so muting or unmuting never kicks the field.
@@ -896,7 +948,7 @@ details[open] { display: grid; gap: 8px; }
     order.forEach((L, i) => {
       const src = L.src, look = lookOf(src);
       L.comp = cmap.get(ck(L));
-      info.set([src.x, src.y, L.n * L.voice.phase + L.off, L.omega], i * 4);
+      info.set([...srcPos(src), L.n * L.voice.phase + L.off, L.omega], i * 4);
       info.set([L.slot, L.comp, src.muted ? 1 : 0, look.len], (MAXL + i) * 4);
       info.set([L.voice.phase, L.voice.omega, L.n, 0], (2 * MAXL + i) * 4);
       for (let k = 0; k < 12; k++) lutD.set([...look.rgb[k].map(v => v / 255), 1], (i * 15 + k) * 4);
@@ -937,7 +989,7 @@ details[open] { display: grid; gap: 8px; }
     gS = Math.max(mS, gS * 0.985, GAIN_FLOOR); gR = Math.max(mR, gR * 0.985, GAIN_FLOOR * GAIN_FLOOR);
     // the cells we need numbers for: the hovered one, then five around each drifter
     const pts = [hover >= 0 ? [hover % W, (hover / W) | 0] : [-1, -1]];
-    for (const l of leaves) { const [cx, cy] = leafCell(l), r = LEAF_R; pts.push([cx, cy], [cx + r, cy], [cx - r, cy], [cx, cy + r], [cx, cy - r]); }
+    for (const l of leaves) { const r = LEAF_R; for (const [dx, dy] of [[0, 0], [r, 0], [-r, 0], [0, r], [0, -r]]) pts.push(hexAt(l.x + dx, l.y + dy)); }
     const np = Math.min(MAXPTS, pts.length), rows = order.length + comps.length;
     if (!rows) { samples = { pts, amp: [], comp: [] }; return; }
     const pd = new Float32Array(MAXPTS * 2); pts.slice(0, np).forEach((q, j) => { pd[j * 2] = q[0]; pd[j * 2 + 1] = q[1]; });
@@ -990,7 +1042,6 @@ details[open] { display: grid; gap: 8px; }
     }
     return q;
   }
-  const cellOf = (x, y) => (x < 0 || y < 0 || x >= W || y >= H) ? -1 : y * W + x;
   // The drift runs uphill on suitability, faster where the slope is steeper, never faster than the waves.
   // The drifter moves at half of it for each step that ran this frame. Walls are solid: it slides along them.
   function moveLeaves(steps) {
@@ -1004,7 +1055,7 @@ details[open] { display: grid; gap: 8px; }
       const gy = slope(suitability(l, base + 3), suitability(l, base + 4));
       const g = Math.hypot(gx, gy); if (g < 1e-12) return;
       const v = 0.5 * Math.min(WAVE_C, kappa * g) * steps;
-      const free = (x, y) => { const i = cellOf(Math.round(x), Math.round(y)); return i >= 0 && !wall[i]; };
+      const free = (x, y) => { const i = idxAt(x, y); return i >= 0 && !wall[i]; };
       // move in single-cell-or-less hops so a fast drifter never jumps a wall
       const hops = Math.max(1, Math.ceil(v)), dx = v * gx / g / hops, dy = v * gy / g / hops;
       for (let h = 0; h < hops; h++) {
@@ -1017,27 +1068,24 @@ details[open] { display: grid; gap: 8px; }
   }
 
   // ---------- drawing ----------
-  // walls are painted once into their own picture whenever they change, then laid over the field
-  const wallCv = document.createElement('canvas'); wallCv.width = W; wallCv.height = H;
-  const wctx = wallCv.getContext('2d');
-  function paintWalls() {
-    if (wallCv.width !== W || wallCv.height !== H) { wallCv.width = W; wallCv.height = H; }
-    const im = wctx.createImageData(W, H), d = im.data, c = hex2rgb(css.getPropertyValue('--stone').trim());
-    for (let i = 0; i < N; i++) if (wall[i]) { d[i * 4] = c[0]; d[i * 4 + 1] = c[1]; d[i * 4 + 2] = c[2]; d[i * 4 + 3] = 255; }
-    wctx.putImageData(im, 0, 0);
-  }
-  function resizeCanvases() { if (GPU_OK) allocField(layersNeeded()); wallCv.width = W; wallCv.height = H; size(); }
+  // walls are drawn by the GPU as hexagons along with the field
+  function paintWalls() {}
+  function resizeCanvases() { if (GPU_OK) allocField(layersNeeded()); size(); }
 
   // Switch grid fineness, keeping the map: walls are resampled cell for cell, sources and drifters keep their places.
   // The field restarts, since its waves were laid out for the old grid.
   function setGrid(k) {
     if (k === gridK) return;
-    const f = k / gridK, oldW = W, oldWall = wall;
+    const f = k / gridK, oldW = W, oldH = H, oldWall = wall;
     applyGrid(k);
     wall = new Uint8Array(N);
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) wall[y * W + x] = oldWall[Math.floor(y / f) * oldW + Math.floor(x / f)];
-    for (const p of posts) { p.x = Math.min(W - 1, Math.round(p.x * f)); p.y = Math.min(H - 1, Math.round(p.y * f)); wall[p.y * W + p.x] = 0; p.s = Math.min(p.s, maxPitch()); }
-    for (const l of leaves) { l.x = Math.min(W - 1, l.x * f); l.y = Math.min(H - 1, l.y * f); l.trail = []; l.chord = l.chord.map(n => Math.min(n, maxPitch())); }
+    // each new cell takes the wall of the old cell at the same place on the map
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const [px, py] = physOf(x, y), [ox, oy] = hexAt(px / f, py / f);
+      wall[y * W + x] = ox >= 0 && oy >= 0 && ox < oldW && oy < oldH ? oldWall[oy * oldW + ox] : 0;
+    }
+    for (const p of posts) { const [px, py] = physOf(p.x, p.y), [x, y] = hexAt(px * f, py * f); p.x = Math.max(0, Math.min(W - 1, x)); p.y = Math.max(0, Math.min(H - 1, y)); wall[p.y * W + p.x] = 0; p.s = Math.min(p.s, maxPitch()); }
+    for (const l of leaves) { l.x = Math.min(W - 1, l.x * f); l.y = Math.min((H - 1) * S3, l.y * f); l.trail = []; l.chord = l.chord.map(n => Math.min(n, maxPitch())); }
     hoverPost = null;
     layers = new Map();
     resizeCanvases(); rebuild(); resetWaves();
@@ -1056,9 +1104,11 @@ details[open] { display: grid; gap: 8px; }
   function size() {
     const box = view$.parentElement.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    cell = box.width / W;
-    view$.width = Math.round(box.width * dpr); view$.height = Math.round(box.width * H / W * dpr);
-    view$.style.height = (box.width * H / W) + 'px'; glcv.style.height = (box.width * H / W) + 'px';
+    cell = box.width / PW();
+    const h = box.width * PH() / PW();
+    view$.width = Math.round(box.width * dpr); view$.height = Math.round(h * dpr);
+    view$.style.height = h + 'px'; glcv.style.height = h + 'px';
+    glcv.width = Math.min(4096, Math.round(box.width * dpr)); glcv.height = Math.min(4096, Math.round(h * dpr));
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
@@ -1070,27 +1120,32 @@ details[open] { display: grid; gap: 8px; }
 
   function draw() {
     if (GPU_OK) {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, W, H);
+      target(viewTex); gl.viewport(0, 0, W, H);
       gl.useProgram(P_VIEW.p); bindRead(P_VIEW);
       const u = P_VIEW.u, c3 = (name, c) => gl.uniform3f(u[name], c[0] / 255, c[1] / 255, c[2] / 255);
       gl.uniform1i(u.uView, VIEW_ID[view]); gl.uniform1i(u.uCW, colourWaves ? 1 : 0);
       gl.uniform1f(u.uGW, gWater); gl.uniform1f(u.uGS, gS); gl.uniform1f(u.uGR, gR); gl.uniform1f(u.uGC, gColour);
       c3('uDeep', COL.deep); c3('uCrest', COL.crest); c3('uCalm', COL.calm); c3('uTurb', COL.turb); c3('uBg', COL.bg);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, glcv.width, glcv.height);
+      gl.useProgram(P_PRESENT.p); bindTex(P_PRESENT, 'uView', 0, viewTex);
+      gl.uniform2i(P_PRESENT.u.uSize, W, H); gl.uniform2f(P_PRESENT.u.uCanvas, glcv.width, glcv.height); gl.uniform2f(P_PRESENT.u.uPhys, PW(), PH());
+      gl.uniform3f(P_PRESENT.u.uStone, COL.stone[0] / 255, COL.stone[1] / 255, COL.stone[2] / 255);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
     }
-    // the overlay: walls, the straight run being drawn, sources and drifters
-    ctx.clearRect(0, 0, cell * W, cell * H);
-    ctx.imageSmoothingEnabled = false; ctx.drawImage(wallCv, 0, 0, cell * W, cell * H); ctx.imageSmoothingEnabled = true;
+    // the overlay: the straight run being drawn, sources and drifters
+    const scr = (px, py) => [(px + 0.5) * cell, (py + 0.5) * cell];
+    ctx.clearRect(0, 0, cell * PW(), cell * PH());
     if (anchor && lockedEnd) {   // the straight run you're holding with Shift, not laid yet
       ctx.globalAlpha = 0.55;
       ctx.fillStyle = tool === 'erase' ? rgb(COL.turb) : rgb(COL.stone);
-      for (const [x, y] of line(anchor, lockedEnd)) ctx.fillRect((x - 2 * gridK + 1) * cell, (y - 2 * gridK + 1) * cell, cell * 2 * gridK, cell * 2 * gridK);
+      for (const [px, py] of line(anchor, lockedEnd)) { const [sx, sy] = scr(px, py); ctx.beginPath(); ctx.arc(sx, sy, cell * gridK, 0, Math.PI * 2); ctx.fill(); }
       ctx.globalAlpha = 1;
     }
     const uc = cell * gridK;   // markers and labels sized by a base cell so they look the same at any grid
     const font = `500 ${Math.max(10, uc * 2.6)}px Azeret Mono, monospace`;
     for (const p of posts) {
-      const cx = (p.x + 0.5) * cell, cy = (p.y + 0.5) * cell;
+      const [cx, cy] = scr(...physOf(p.x, p.y));
       ctx.beginPath(); ctx.arc(cx, cy, Math.max(4, uc * 1.1), 0, Math.PI * 2);
       ctx.fillStyle = p.muted ? rgb(COL.bg) : rgb(COL.fg); ctx.fill();
       ctx.lineWidth = 2; ctx.strokeStyle = rgb(COL.stone); ctx.stroke();
@@ -1099,12 +1154,12 @@ details[open] { display: grid; gap: 8px; }
     }
     for (const l of leaves) {
       if (l.trail.length > 1) {
-        ctx.beginPath(); ctx.moveTo((l.trail[0][0] + 0.5) * cell, (l.trail[0][1] + 0.5) * cell);
-        for (const [x, y] of l.trail) ctx.lineTo((x + 0.5) * cell, (y + 0.5) * cell);
-        ctx.lineTo((l.x + 0.5) * cell, (l.y + 0.5) * cell);
+        ctx.beginPath(); ctx.moveTo(...scr(l.trail[0][0], l.trail[0][1]));
+        for (const [x, y] of l.trail) ctx.lineTo(...scr(x, y));
+        ctx.lineTo(...scr(l.x, l.y));
         ctx.globalAlpha = 0.5; ctx.lineWidth = 1.5; ctx.strokeStyle = rgb(COL.calm); ctx.stroke(); ctx.globalAlpha = 1;
       }
-      const cx = (l.x + 0.5) * cell, cy = (l.y + 0.5) * cell, r = Math.max(5, uc * 1.4);
+      const [cx, cy] = scr(l.x, l.y), r = Math.max(5, uc * 1.4);
       ctx.save(); ctx.translate(cx, cy); ctx.rotate(-Math.PI / 4);
       ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.55, 0, 0, Math.PI * 2);
       ctx.fillStyle = l.muted ? rgb(COL.bg) : rgb(COL.calm); ctx.fill();
@@ -1459,34 +1514,32 @@ details[open] { display: grid; gap: 8px; }
 
   // ---------- painting ----------
   let painting = false;
-  function cellAt(ev) {
-    const r = view$.getBoundingClientRect();
-    const x = Math.floor((ev.clientX - r.left) / (r.width / W)), y = Math.floor((ev.clientY - r.top) / (r.height / H));
-    return (x >= 0 && y >= 0 && x < W && y < H) ? [x, y] : null;
-  }
-  // one 2x2 brush dab, so walls are thick enough to read; returns whether walls changed
-  function dab(x, y) {
+  // where the pointer is on the map, in cell spacings, and the cell under it
+  function physAt(ev) { const r = view$.getBoundingClientRect(); return [(ev.clientX - r.left) / cell - 0.5, (ev.clientY - r.top) / cell - 0.5]; }
+  function cellAt(ev) { const [x, y] = hexAt(...physAt(ev)); return inGrid(x, y) ? [x, y] : null; }
+  // one round brush dab about two cells across at any grid, so walls are thick enough to read; returns whether walls changed
+  function dab(px, py) {
     let wallsChanged = false;
-    const B = 2 * gridK;   // walls stay the same real thickness at any grid
-    for (let dy = 1 - B; dy <= 0; dy++) for (let dx = 1 - B; dx <= 0; dx++) {
-      const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
-      const j = yy * W + xx;
-      const leafHere = leaves.some(l => Math.round(l.x) === xx && Math.round(l.y) === yy);
-      if (tool === 'wall' && !wall[j] && !leafHere && !posts.some(p => p.x === xx && p.y === yy)) { wall[j] = 1; wallsChanged = true; }
+    const R = gridK, r0 = Math.floor((py - R) / S3) - 1, r1 = Math.ceil((py + R) / S3) + 1;
+    for (let y = Math.max(0, r0); y <= Math.min(H - 1, r1); y++) for (let x = Math.max(0, Math.floor(px - R) - 1); x <= Math.min(W - 1, Math.ceil(px + R) + 1); x++) {
+      const [cx, cy] = physOf(x, y); if (Math.hypot(cx - px, cy - py) > R) continue;
+      const j = y * W + x;
+      const leafHere = leaves.some(l => { const [lx, ly] = leafCell(l); return lx === x && ly === y; });
+      if (tool === 'wall' && !wall[j] && !leafHere && !posts.some(p => p.x === x && p.y === y)) { wall[j] = 1; wallsChanged = true; }
       if (tool === 'erase') {
         if (wall[j]) { wall[j] = 0; wallsChanged = true; }
-        const before = posts.length + leaves.length;
-        posts = posts.filter(p => !(p.x === xx && p.y === yy));
-        leaves = leaves.filter(l => Math.hypot(l.x - xx, l.y - yy) > 1.5 * gridK);
-        if (posts.length + leaves.length !== before) changed();
+        const before = posts.length;
+        posts = posts.filter(p => !(p.x === x && p.y === y));
+        if (posts.length !== before) changed();
       }
     }
+    if (tool === 'erase') { const before = leaves.length; leaves = leaves.filter(l => Math.hypot(l.x - px, l.y - py) > 1.5 * gridK); if (leaves.length !== before) changed(); }
     return wallsChanged;
   }
-  // every cell on the line between two cells, so a fast drag leaves no gaps
+  // points every half cell along the line between two points, so a fast drag leaves no gaps
   function line(a, b) {
-    const n = Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]), 1), out = [];
-    for (let k = 0; k <= n; k++) out.push([Math.round(a[0] + (b[0] - a[0]) * k / n), Math.round(a[1] + (b[1] - a[1]) * k / n)]);
+    const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) * 2)), out = [];
+    for (let k = 0; k <= n; k++) out.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]);
     return out;
   }
   // holding Shift locks the stroke to straight across, straight down, or a 45 degree diagonal from where it started
@@ -1500,24 +1553,25 @@ details[open] { display: grid; gap: 8px; }
   let anchor = null, last = null, lockedEnd = null;
   function stroke(ev, first) {
     const c = cellAt(ev); if (!c) return;
+    const ph = physAt(ev);
     if (tool === 'post' || tool === 'leaf') {
       if (!first || wall[c[1] * W + c[0]]) return;
       if (tool === 'post' && (octave - 2) * 12 + note > maxPitch()) return;
       if (layersNeeded() + layersFor(DEF_SND().shape, tool === 'post' ? [(octave - 2) * 12 + note] : [...chord]) > MAXL) { flashFull(); return; }
       const made = tool === 'post'
         ? { id: nextId++, x: c[0], y: c[1], s: (octave - 2) * 12 + note, muted: false, t0: t, snd: DEF_SND() }
-        : { id: nextId++, x: c[0], y: c[1], chord: [...chord].filter(n => n <= maxPitch()).sort((a, b) => a - b), muted: false, t0: t, trail: [], snd: DEF_SND() };
+        : { id: nextId++, x: physOf(c[0], c[1])[0], y: physOf(c[0], c[1])[1], chord: [...chord].filter(n => n <= maxPitch()).sort((a, b) => a - b), muted: false, t0: t, trail: [], snd: DEF_SND() };
       (tool === 'post' ? posts : leaves).push(made);
       sel = made; changed(); renderTune(); return;
     }
     let wallsChanged = false;
-    if (first) { anchor = last = c; wallsChanged = dab(c[0], c[1]); }
+    if (first) { anchor = last = ph; wallsChanged = dab(...ph); }
     else if (ev.shiftKey) {
-      lockedEnd = snap(anchor, c);   // shown as a preview, laid down on release
+      lockedEnd = snap(anchor, ph);   // shown as a preview, laid down on release
     } else {
       if (lockedEnd) { wallsChanged = commitStraight(); last = anchor; }   // let go of Shift mid-stroke: lay it and carry on freehand
-      for (const [x, y] of line(last, c)) wallsChanged = dab(x, y) || wallsChanged;
-      last = c;
+      for (const [x, y] of line(last, ph)) wallsChanged = dab(x, y) || wallsChanged;
+      last = ph;
     }
     if (wallsChanged) rebuild();
   }
@@ -1544,7 +1598,7 @@ details[open] { display: grid; gap: 8px; }
     const c = cellAt(ev); hover = c ? c[1] * W + c[0] : -1;
     // the note picker lights up against whichever post is under the mouse (within two cells, nearest wins)
     let near = null, best = 2.5 * gridK;
-    if (c) for (const p of posts) { const d = Math.hypot(p.x - c[0], p.y - c[1]); if (d < best) { best = d; near = p; } }
+    if (c) { const [hx, hy] = physOf(...c); for (const p of posts) { const [qx, qy] = physOf(p.x, p.y), d = Math.hypot(qx - hx, qy - hy); if (d < best) { best = d; near = p; } } }
     if (near !== hoverPost) { hoverPost = near; renderNotes(); }
     if (painting) stroke(ev, false);
   });
@@ -1563,10 +1617,13 @@ details[open] { display: grid; gap: 8px; }
 
   // ---------- presets ----------
   // presets are laid out in base (1x) cells and scaled to the grid
-  function box(x0, y0, x1, y1) { const K = gridK; for (let x = x0 * K; x < (x1 + 1) * K; x++) for (let y = y0 * K; y < (y1 + 1) * K; y++) wall[y * W + x] = 1; }
+  function box(x0, y0, x1, y1) {
+    const K = gridK;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const [px, py] = physOf(x, y); if (px >= x0 * K - 0.5 && px < (x1 + 1) * K - 0.5 && py >= y0 * K - 0.5 && py < (y1 + 1) * K - 0.5) wall[y * W + x] = 1; }
+  }
   function loadPreset(name) {
     wall = new Uint8Array(N); posts = []; leaves = []; layers = new Map(); t = 0;
-    const P = (x, y, s) => posts.push({ id: nextId++, x: x * gridK, y: y * gridK, s, muted: false, t0: 0, snd: DEF_SND() });
+    const P = (x, y, s) => { const [cx, cy] = hexAt(x * gridK, y * gridK); posts.push({ id: nextId++, x: cx, y: cy, s, muted: false, t0: 0, snd: DEF_SND() }); };
     sel = null;
     if (name === 'courtyard') {
       // a walled yard with a gate in the south wall; a C major triad inside, a clashing F# outside
@@ -1585,7 +1642,7 @@ details[open] { display: grid; gap: 8px; }
 
   // ---------- keep the map across reloads and updates ----------
   // walls, posts and leaves are saved in this browser every second they change, and come back on reload
-  const KEY = 'fds-map-v2', OLD_KEY = 'fds-map-v1';
+  const KEY = 'fds-map-v3', SQ_KEY = 'fds-map-v2', OLD_KEY = 'fds-map-v1';   // v3: hexagonal grid
   let savedSig = '';
   function saveMap() {
     const w = []; for (let i = 0; i < N; i++) if (wall[i]) w.push(i);
@@ -1599,7 +1656,12 @@ details[open] { display: grid; gap: 8px; }
   function restoreMap() {
     let raw = null;
     let old = false;
-    try { raw = localStorage.getItem(KEY); if (!raw) { raw = localStorage.getItem(OLD_KEY); old = !!raw; } } catch (e) {}
+    let square = false;
+    try {
+      raw = localStorage.getItem(KEY);
+      if (!raw) { raw = localStorage.getItem(SQ_KEY); square = !!raw; }
+      if (!raw) { raw = localStorage.getItem(OLD_KEY); old = square = !!raw; }
+    } catch (e) {}
     if (!raw) return false;
     try {
       const d = JSON.parse(raw);
@@ -1609,7 +1671,18 @@ details[open] { display: grid; gap: 8px; }
         raw = '';
       }
       if ((d.k || 1) !== gridK) { applyGrid(d.k || 1); resizeCanvases(); }
-      wall = new Uint8Array(N); for (const i of d.w) if (i >= 0 && i < N) wall[i] = 1;
+      wall = new Uint8Array(N);
+      if (square) {
+        // a map saved on the old square grid: every hexagonal cell takes the wall of the square cell at its place
+        const k = d.k || 1, sw = BASE_W * k, sh = BASE_H * k, old = new Uint8Array(sw * sh);
+        for (const i of d.w) if (i >= 0 && i < sw * sh) old[i] = 1;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+          const [px, py] = physOf(x, y), ox = Math.min(sw - 1, Math.round(px)), oy = Math.min(sh - 1, Math.round(py));
+          wall[y * W + x] = old[oy * sw + ox];
+        }
+        d.p = d.p.map(q => { const [x, y] = hexAt(q[0], q[1]); q[0] = Math.max(0, Math.min(W - 1, x)); q[1] = Math.max(0, Math.min(H - 1, y)); wall[q[1] * W + q[0]] = 0; return q; });
+        raw = '';
+      } else for (const i of d.w) if (i >= 0 && i < N) wall[i] = 1;
       posts = d.p.map(([x, y, s, m, snd]) => ({ id: nextId++, x, y, s, muted: !!m, t0: 0, snd: { ...DEF_SND(), ...(snd || {}) } }));
       leaves = (d.l || []).map(([x, y, c, m, snd]) => ({ id: nextId++, x, y, chord: c, muted: !!m, t0: 0, trail: [], snd: { ...DEF_SND(), ...(snd || {}) } }));
       layers = new Map(); t = 0;
