@@ -592,7 +592,8 @@ details[open] { display: grid; gap: 8px; }
   vec4 info(int i, int r) { return texelFetch(uInfo, ivec2(i, r), 0); }
   vec4 gen(int i, int g, ivec2 p) { return texelFetch(uS, ivec3(p, int(info(i, 1).x) * uGEN + g), 0); }
   // the exact height of a single-frequency wave from two steps of it: law of cosines on the phasor
-  float ampOf(float u, float up, float w) { float s = sin(w); return sqrt(max(0., u * u + up * up - 2. * u * up * cos(w)) / (s * s)); }
+  // written as (u - up)^2 + 4 u up sin^2(w/2), the same thing, so fine grids (tiny w, u close to up) keep their precision
+  float ampOf(float u, float up, float w) { float d = u - up, h = sin(0.5 * w); return sqrt(max(0., d * d + 4. * u * up * h * h)) / sin(w); }
   vec3 lut(int i, int k) { return texelFetch(uLut, ivec2(k, i), 0).rgb; }
   // the colour of the wave of layer i passing through: which wave of its source's fundamental it belongs to
   vec3 waveCol(int i, ivec2 p, float u, float up) {
@@ -776,7 +777,7 @@ details[open] { display: grid; gap: 8px; }
     for (let i = 0; i < n; i++) { const a = gl.getActiveUniform(p, i); u[a.name.replace(/\[0\]$/, '')] = gl.getUniformLocation(p, a.name); }
     return { p, u: new Proxy(u, { get: (o, k) => o[k] ?? null }) };
   }
-  let P_STEP, P_GHOST, P_VIEW, P_PRESENT, viewTex, P_METRIC, P_SAMPLE, fbo, fbo2, S0, S1, wallTex, infoTex, lutTex, pairsTex, ptsTex, metricTex, sampleTex;
+  let P_STEP, P_GHOST, P_VIEW, P_PRESENT, viewTex, P_METRIC, P_SAMPLE, fbo, fbo2, S0, SC, wallTex, infoTex, lutTex, pairsTex, ptsTex, metricTex, sampleTex;
   function texParams(target) {
     gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
@@ -793,31 +794,48 @@ details[open] { display: grid; gap: 8px; }
   }
   // The field at the current grid size, with room for `cap` slots; it starts flat. Room grows in steps of eight slots
   // as sources are added, so a few sources don't hold memory for 64.
+  // The field: every slot's layers in one texture array (S0), plus a scratch array (SC) just big enough for the one
+  // slot being stepped. Fine grids with reflections need a lot of graphics memory, so the field is held only once.
+  const FIELD_BUDGET = 1.25e9;   // bytes; past this the browser may refuse or drop the graphics context
+  const fieldBytes = slots => W * H * 8 * (slots * GEN + GEN);
   function allocField(slots = 8) {
-    for (const x of [S0, S1, wallTex, viewTex]) if (x) gl.deleteTexture(x);
+    for (const x of [S0, SC, wallTex, viewTex]) if (x) gl.deleteTexture(x);
+    S0 = SC = null;
     cap = Math.min(MAXL, Math.max(8, Math.ceil(slots / 8) * 8));
-    try { S0 = texArray(cap * GEN); S1 = texArray(cap * GEN); }
-    catch (e) { if (S0) gl.deleteTexture(S0); cap = 8; S0 = texArray(cap * GEN); S1 = texArray(cap * GEN); setTimeout(gpuFull, 0); }
+    try {
+      if (fieldBytes(cap) > FIELD_BUDGET) throw new Error('budget');
+      S0 = texArray(cap * GEN); SC = texArray(GEN);
+    } catch (e) {
+      for (const x of [S0, SC]) if (x) gl.deleteTexture(x);
+      S0 = SC = null;
+      if (GEN > 1) {   // reflections take four times the memory: drop them before dropping waves
+        echoes = false; GEN = 1; $('ce').setAttribute('aria-pressed', 'false');
+        setTimeout(() => memNote('Reflections turned off: at this resolution they need more graphics memory than the browser allows for this many waves. Use a coarser grid or fewer waves.'), 0);
+        return allocField(slots);
+      }
+      cap = 8; S0 = texArray(cap); SC = texArray(1); setTimeout(gpuFull, 0);
+    }
     wallTex = tex2D(gl.R8, W, H); viewTex = tex2D(gl.RGBA8, W, H);
-    for (let sl = 0; sl < cap * GEN; sl++) { clearSlice(S0, sl); clearSlice(S1, sl); }
+    for (let sl = 0; sl < cap * GEN; sl++) clearSlice(S0, sl);
     uploadWalls();
   }
   // make room for more slots, keeping every wave already in the field
   function ensureCap(slots) {
     if (!GPU_OK || slots <= cap) return;
-    const old0 = S0, old1 = S1, oldDepth = cap * GEN, oldCap = cap;
+    const old0 = S0, oldDepth = cap * GEN, oldCap = cap;
     cap = Math.min(MAXL, Math.ceil(slots / 8) * 8);
     // a fine grid with many waves and reflections can outgrow the graphics card's memory: keep what we have and say so
-    try { S0 = texArray(cap * GEN); S1 = texArray(cap * GEN); }
-    catch (e) { if (S0 !== old0) gl.deleteTexture(S0); S0 = old0; S1 = old1; cap = oldCap; gpuFull(); return; }
-    for (const [from, to] of [[old0, S0], [old1, S1]]) for (let sl = 0; sl < cap * GEN; sl++) {
+    // (growing briefly holds the old and new field together, so it counts both)
+    try { if (fieldBytes(cap) + fieldBytes(oldCap) > 1.6 * FIELD_BUDGET) throw new Error('budget'); S0 = texArray(cap * GEN); }
+    catch (e) { if (S0 !== old0) gl.deleteTexture(S0); S0 = old0; cap = oldCap; gpuFull(); return; }
+    for (const [from, to] of [[old0, S0]]) for (let sl = 0; sl < cap * GEN; sl++) {
       if (sl >= oldDepth) { clearSlice(to, sl); continue; }
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fbo2); gl.framebufferTextureLayer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, from, 0, sl);
       gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, fbo); gl.framebufferTextureLayer(gl.DRAW_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, to, 0, sl);
       gl.blitFramebuffer(0, 0, W, H, 0, 0, W, H, gl.COLOR_BUFFER_BIT, gl.NEAREST);
     }
     gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null); gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
-    gl.deleteTexture(old0); gl.deleteTexture(old1);
+    gl.deleteTexture(old0);
   }
   function target(texture, slice) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
@@ -825,7 +843,7 @@ details[open] { display: grid; gap: 8px; }
     else gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, texture, 0, slice);
   }
   function clearSlice(texture, slice) { target(texture, slice); gl.clearBufferfv(gl.COLOR, 0, [0, 0, 0, 0]); }
-  function clearSlot(slot) { if (slot >= cap) return; for (let g = 0; g < GEN; g++) { clearSlice(S0, slot * GEN + g); clearSlice(S1, slot * GEN + g); } }
+  function clearSlot(slot) { if (slot >= cap) return; for (let g = 0; g < GEN; g++) clearSlice(S0, slot * GEN + g); }
   function uploadWalls() {
     const d = new Uint8Array(N); for (let i = 0; i < N; i++) d[i] = wall[i] ? 255 : 0;
     gl.bindTexture(gl.TEXTURE_2D, wallTex); gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
@@ -876,7 +894,7 @@ details[open] { display: grid; gap: 8px; }
   const pitchesInPlay = () => [...new Set([...layers.values()].map(L => L.s))].sort((a, b) => a - b);
 
   function resetWaves() {
-    if (GPU_OK) for (let sl = 0; sl < cap * GEN; sl++) { clearSlice(S0, sl); clearSlice(S1, sl); }
+    if (GPU_OK) for (let sl = 0; sl < cap * GEN; sl++) clearSlice(S0, sl);
     for (const L of layers.values()) L.fPrev = 0;
     for (const p of posts) p.env = 0;
     for (const l of leaves) { l.env = 0; l.trail = []; }
@@ -899,11 +917,17 @@ details[open] { display: grid; gap: 8px; }
     for (const V of voices.values()) { V.phase += V.omega; if (V.phase > PHASE_WRAP) V.phase -= PHASE_WRAP; }
     if (!GPU_OK) { t++; return; }
     gl.viewport(0, 0, W, H);
+    gl.useProgram(P_GHOST.p);
+    gl.uniform2i(P_GHOST.u.uSize, W, H); gl.uniform1f(P_GHOST.u.uK, (WAVE_C - 1) / (WAVE_C + 1));
     gl.useProgram(P_STEP.p);
-    bindTex(P_STEP, 'uS', 0, S0, gl.TEXTURE_2D_ARRAY); bindTex(P_STEP, 'uWall', 1, wallTex);
     gl.uniform2i(P_STEP.u.uSize, W, H); gl.uniform1i(P_STEP.u.uSponge, SPONGE); gl.uniform1i(P_STEP.u.uOpen, edgeOpen ? 1 : 0);
-    gl.uniform1f(P_STEP.u.uSmax, SMAX); gl.uniform1f(P_STEP.u.uC2, C2);
+    gl.uniform1f(P_STEP.u.uSmax, SMAX / gridK); gl.uniform1f(P_STEP.u.uC2, C2);
+    // (the border's absorption is per step; waves take k steps per base cell, so dividing by k keeps it the same per
+    // real distance at any grid: a harsher border reflects long waves instead of soaking them up)
     for (const L of layers.values()) {
+      if (L.slot >= cap) continue;
+      gl.useProgram(P_STEP.p);
+      bindTex(P_STEP, 'uS', 0, S0, gl.TEXTURE_2D_ARRAY); bindTex(P_STEP, 'uWall', 1, wallTex);
       // A source pushes the field by the step-to-step change of a bounded tone, never by the tone itself, so it adds
       // no net field. Gain, the fade envelope, the harmonic's share of the waveform and the loudness scaling all live
       // inside f, so changing any of them mid-song still adds none. In flat field a low wave comes out bigger than a
@@ -914,7 +938,7 @@ details[open] { display: grid; gap: 8px; }
       const [sx, sy] = src.chord ? leafCell(src) : [src.x, src.y];
       gl.uniform1f(P_STEP.u.uAir, air * Math.pow(freqHz(L.s) * L.n / 440, 2) / gridK);   // highs fade faster; per step, per base cell
       for (let g = 0; g < GEN; g++) {
-        target(S1, L.slot * GEN + g);
+        target(SC, g);
         gl.uniform1i(P_STEP.u.uSlice, L.slot * GEN + g);
         gl.uniform1i(P_STEP.u.uPrev, g > 0 ? L.slot * GEN + g - 1 : -1);
         gl.uniform1i(P_STEP.u.uMur, g < GEN - 1 ? 1 : 0);
@@ -922,17 +946,15 @@ details[open] { display: grid; gap: 8px; }
         gl.uniform1f(P_STEP.u.uPush, push);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
       }
-    }
-    if (GEN > 1) {
+      // back into the field, with each order's absorbing walls updated (the last order's walls stay reflective)
       gl.useProgram(P_GHOST.p);
-      bindTex(P_GHOST, 'uS', 0, S1, gl.TEXTURE_2D_ARRAY); bindTex(P_GHOST, 'uWall', 1, wallTex);
-      gl.uniform2i(P_GHOST.u.uSize, W, H); gl.uniform1f(P_GHOST.u.uK, (WAVE_C - 1) / (WAVE_C + 1));
-      for (const L of layers.values()) for (let g = 0; g < GEN; g++) {
+      bindTex(P_GHOST, 'uS', 0, SC, gl.TEXTURE_2D_ARRAY); bindTex(P_GHOST, 'uWall', 1, wallTex);
+      for (let g = 0; g < GEN; g++) {
         target(S0, L.slot * GEN + g);
-        gl.uniform1i(P_GHOST.u.uSlice, L.slot * GEN + g); gl.uniform1i(P_GHOST.u.uMur, g < GEN - 1 ? 1 : 0);
+        gl.uniform1i(P_GHOST.u.uSlice, g); gl.uniform1i(P_GHOST.u.uMur, g < GEN - 1 ? 1 : 0);
         gl.drawArrays(gl.TRIANGLES, 0, 3);
       }
-    } else { const x = S0; S0 = S1; S1 = x; }
+    }
     t++;
   }
 
@@ -1051,10 +1073,15 @@ details[open] { display: grid; gap: 8px; }
       const qc = suitability(l, base); if (qc === null) return;
       const r = LEAF_R;
       const slope = (a, b) => (a !== null && b !== null) ? (a - b) / (2 * r) : a !== null ? (a - qc) / r : b !== null ? (qc - b) / r : 0;
-      const gx = slope(suitability(l, base + 1), suitability(l, base + 2));
-      const gy = slope(suitability(l, base + 3), suitability(l, base + 4));
-      const g = Math.hypot(gx, gy); if (g < 1e-12) return;
-      const v = 0.5 * Math.min(WAVE_C, kappa * g) * steps;
+      // the drifter feels the slope averaged over about a wave period, not one instant of it: a single reading wobbles
+      // with the wave, and on fine grids the wobble can be bigger than the slope itself
+      const a = Math.min(1, steps / (60 * gridK));
+      l.gx = (l.gx || 0) + (slope(suitability(l, base + 1), suitability(l, base + 2)) - (l.gx || 0)) * a;
+      l.gy = (l.gy || 0) + (slope(suitability(l, base + 3), suitability(l, base + 4)) - (l.gy || 0)) * a;
+      const gx = l.gx, gy = l.gy, g = Math.hypot(gx, gy); if (g < 1e-12) return;
+      // The slope is per cell, and a cell is 1/k of a base cell, so the same field reads k times flatter on a k-times
+      // finer grid; scaling by k keeps the drift the same real speed at every resolution.
+      const v = 0.5 * Math.min(WAVE_C, kappa * g * gridK) * steps;
       const free = (x, y) => { const i = idxAt(x, y); return i >= 0 && !wall[i]; };
       // move in single-cell-or-less hops so a fast drifter never jumps a wall
       const hops = Math.max(1, Math.ceil(v)), dx = v * gx / g / hops, dy = v * gy / g / hops;
@@ -1576,6 +1603,11 @@ details[open] { display: grid; gap: 8px; }
     if (wallsChanged) rebuild();
   }
   // the field has room for 64 waves: each harmonic of each sung note is one
+  function memNote(text) { const h = $('notehint'); h.textContent = text; h.style.color = 'var(--turb)'; setTimeout(() => { h.style.color = ''; }, 8000); }
+  if (glcv) glcv.addEventListener('webglcontextlost', e => {
+    e.preventDefault(); GPU_OK = false;
+    memNote('The graphics card dropped the simulator, most likely out of memory. Reload the page, then use a coarser grid, fewer waves or Reflections off.');
+  });
   function gpuFull() {
     const h = $('notehint');
     h.textContent = 'Out of graphics memory for more waves at this resolution. Use a coarser grid, turn Reflections off, or remove something.';
