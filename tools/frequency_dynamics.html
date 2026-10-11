@@ -200,7 +200,7 @@ details[open] { display: grid; gap: 8px; }
         <div class="cardhead">
           <h2 id="noteh">Note for the next post</h2>
           <label class="inline" for="oct">Octave
-            <select id="oct"><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option></select></label>
+            <select id="oct"><option value="2">2</option><option value="3">3</option><option value="4" selected>4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option></select></label>
         </div>
         <div class="notes" id="notes"></div>
         <div class="chordv" id="chordv" hidden></div>
@@ -266,6 +266,8 @@ details[open] { display: grid; gap: 8px; }
               <option value="blank">Empty field</option>
             </select>
             <button id="load">Load</button></div>
+          <div class="ctl"><label for="grid">Grid</label>
+            <select id="grid"><option value="1">1x · 160 × 100</option><option value="2">2x · 320 × 200, 4× the work</option><option value="3">3x · 480 × 300, 9× the work</option></select><span class="val" id="gridv"></span></div>
           <div class="ctl"><label for="edge">Edge</label>
             <select id="edge"><option value="open" selected>Open, waves leave</option><option value="hard">Hard, waves bounce</option></select><span></span></div>
           <div class="ctl"><label for="speed">Speed</label><input id="speed" type="range" min="0" max="100" value="85"><span class="val" id="speedv">4 steps a frame</span></div>
@@ -293,13 +295,23 @@ details[open] { display: grid; gap: 8px; }
 <script>
 (() => {
   // ---------- grid and constants ----------
-  const W = 160, H = 100, N = W * H;
+  // The grid can be 1x, 2x or 3x finer. The room it represents stays the same size: every length in cells scales
+  // with it, so finer grids fit shorter waves (higher notes) at the cost of four or nine times the work.
+  const BASE_W = 160, BASE_H = 100, BASE_LAMBDA = 11, MIN_WAVE_CELLS = 3.6;
+  let gridK = 1;
+  try { gridK = Math.max(1, Math.min(3, +localStorage.getItem('fds-grid') || 1)); } catch (e) {}
+  let W, H, N, LAMBDA_A4, SPONGE, EMA, OMEGA_REF, LEAF_R;
   const WAVE_C = 0.5, C2 = WAVE_C * WAVE_C;   // waves travel half a cell a step, inside the 2D stability limit
-  const LAMBDA_A4 = 11;         // wavelength of A4 in cells; every other note keeps the true ratio (C2 about 74, B5 about 5)
-  const SPONGE = 18, SMAX = 0.16;   // wide enough to soak up long bass waves at an open edge
-  const AMP = 0.6, RAMP = 120, EMA = 0.012;
-  const OMEGA_REF = 2 * Math.PI * WAVE_C / LAMBDA_A4;   // A4, the note whose push is left as it was
-  const LEAF_R = 2;             // how far either side a leaf feels the slope of the water
+  const SMAX = 0.16, AMP = 0.6, RAMP = 120;
+  function applyGrid(k) {
+    gridK = k; W = BASE_W * k; H = BASE_H * k; N = W * H;
+    LAMBDA_A4 = BASE_LAMBDA * k;          // wavelength of A4 in cells; every other note keeps the true ratio
+    SPONGE = 18 * k;                      // wide enough to soak up long bass waves at an open edge
+    EMA = 0.012 / k;                      // strength is averaged over the same stretch of real time at any grid
+    OMEGA_REF = 2 * Math.PI * WAVE_C / LAMBDA_A4;   // A4, the note whose push is left as it was
+    LEAF_R = 2 * k;                       // how far either side a leaf feels the slope of the water
+  }
+  applyGrid(gridK);
   const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
   const css = getComputedStyle(document.documentElement);
@@ -307,7 +319,9 @@ details[open] { display: grid; gap: 8px; }
   const COL = { deep: hex('--deep'), crest: hex('--crest'), calm: hex('--calm'), turb: hex('--turb'), stone: hex('--stone'), bg: hex('--bg'), fg: hex('--fg') };
 
   // semitone index s: 0 = C2 ... 47 = B5, so A4 (440 Hz) is 33
-  const NOTE_COUNT = 48, A4 = 33;
+  const NOTE_COUNT = 72, NORM_COUNT = 48, A4 = 33;   // pitches run C2 to B7; clash is scaled against C2 to B5 as before
+  // the highest pitch the current grid can carry: its wave still needs a few cells to be a wave
+  const maxPitch = () => Math.min(NOTE_COUNT - 1, Math.floor(A4 + 12 * Math.log2(LAMBDA_A4 / MIN_WAVE_CELLS)));
   const freqHz = s => 440 * Math.pow(2, (s - A4) / 12);
   const lambda = s => LAMBDA_A4 * Math.pow(2, -(s - A4) / 12);
   // a pitch's name, with cents when it sits between notes (C4+37¢)
@@ -335,12 +349,12 @@ details[open] { display: grid; gap: 8px; }
   // so clash is worked out for any two pitches on demand and remembered.
   const pairKey = (a, b) => Math.round(a * 100) * 100000 + Math.round(b * 100);
   let dmax = 0;
-  for (let a = 0; a < NOTE_COUNT; a++) for (let b = a; b < NOTE_COUNT; b++)
+  for (let a = 0; a < NORM_COUNT; a++) for (let b = a; b < NORM_COUNT; b++)
     dmax = Math.max(dmax, cross(a, b) - 0.5 * (cross(a, a) + cross(b, b)));
   const earCache = new Map();
   function earClash(a, b) {
     const k = pairKey(a, b); let v = earCache.get(k);
-    if (v === undefined) { v = Math.max(0, cross(a, b) - 0.5 * (cross(a, a) + cross(b, b))) / dmax; earCache.set(k, v); }
+    if (v === undefined) { v = Math.min(1, Math.max(0, cross(a, b) - 0.5 * (cross(a, a) + cross(b, b))) / dmax); earCache.set(k, v); }
     return v;
   }
 
@@ -355,7 +369,7 @@ details[open] { display: grid; gap: 8px; }
   const RATIOS = [];
   for (const p of FIVE) for (const q of FIVE) {
     if (p < q || gcd(p, q) !== 1) continue;
-    const c = 1200 * Math.log2(p / q); if (c > 6100) continue;
+    const c = 1200 * Math.log2(p / q); if (c > 7300) continue;
     RATIOS.push({ c, h: Math.log2(p * q), r: p + ':' + q });
   }
   function waveFit(cents) {
@@ -367,11 +381,11 @@ details[open] { display: grid; gap: 8px; }
     }
     return { score: best, ratio };
   }
-  let wmax = 0; for (let n = 0; n < NOTE_COUNT; n++) wmax = Math.max(wmax, waveFit(100 * n).score);
+  let wmax = 0; for (let n = 0; n < NORM_COUNT; n++) wmax = Math.max(wmax, waveFit(100 * n).score);
   const waveCache = new Map();
   function waveClash(a, b) {
     const k = pairKey(a, b); let v = waveCache.get(k);
-    if (v === undefined) { v = waveFit(100 * (b - a)).score / wmax; waveCache.set(k, v); }
+    if (v === undefined) { v = Math.min(1, waveFit(100 * (b - a)).score / wmax); waveCache.set(k, v); }
     return v;
   }
   const ratioAt = (a, b) => waveFit(100 * Math.abs(b - a)).ratio;
@@ -426,6 +440,7 @@ details[open] { display: grid; gap: 8px; }
       sigma[i] = s; lv.push(i);
     }
     live = Int32Array.from(lv);
+    paintWalls();
     // The same map with no walls and soft edges all round: what each source's waves would do if nothing were in
     // the way. Subtracting it from the real water leaves exactly the waves that walls (or a hard edge) sent back.
     fL = new Int32Array(N); fR = new Int32Array(N); fU = new Int32Array(N); fD = new Int32Array(N); sigmaF = new Float32Array(N);
@@ -479,7 +494,7 @@ details[open] { display: grid; gap: 8px; }
     for (const L of layers.values()) {
       const u = L.u, up = L.up, un = L.un, e = L.e;
       // air takes highs far faster than lows: loss grows with the square of the frequency, set relative to A4
-      const airL = air * Math.pow(freqHz(L.s) / 440, 2);
+      const airL = air * Math.pow(freqHz(L.s) / 440, 2) / gridK;   // per step; waves take k steps per base cell
       for (let k = 0; k < live.length; k++) {
         const i = live[k], s = sigma[i] + airL;
         const lap = u[nL[i]] + u[nR[i]] + u[nU[i]] + u[nD[i]] - 4 * u[i];
@@ -580,7 +595,37 @@ details[open] { display: grid; gap: 8px; }
   const view$ = document.getElementById('view');
   const ctx = view$.getContext('2d');
   const off = document.createElement('canvas'); off.width = W; off.height = H;
-  const octx = off.getContext('2d'); const img = octx.createImageData(W, H);
+  const octx = off.getContext('2d'); let img = octx.createImageData(W, H);
+  // walls are painted once into their own picture whenever they change, not cell by cell every frame
+  const wallCv = document.createElement('canvas'); wallCv.width = W; wallCv.height = H;
+  const wctx = wallCv.getContext('2d');
+  function paintWalls() {
+    if (wallCv.width !== W) { wallCv.width = W; wallCv.height = H; }
+    const im = wctx.createImageData(W, H), d = im.data, c = hex2rgb(css.getPropertyValue('--stone').trim());
+    for (let i = 0; i < N; i++) if (wall[i]) { d[i * 4] = c[0]; d[i * 4 + 1] = c[1]; d[i * 4 + 2] = c[2]; d[i * 4 + 3] = 255; }
+    wctx.putImageData(im, 0, 0);
+  }
+  function resizeCanvases() { off.width = W; off.height = H; img = octx.createImageData(W, H); wallCv.width = W; wallCv.height = H; size(); }
+
+  // Switch grid fineness, keeping the map: walls are resampled cell for cell, posts and leaves keep their places.
+  // The water restarts, since its waves were laid out for the old grid.
+  function setGrid(k) {
+    if (k === gridK) return;
+    const f = k / gridK, oldW = W, oldWall = wall;
+    applyGrid(k);
+    wall = new Uint8Array(N);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) wall[y * W + x] = oldWall[Math.floor(y / f) * oldW + Math.floor(x / f)];
+    for (const p of posts) { p.x = Math.min(W - 1, Math.round(p.x * f)); p.y = Math.min(H - 1, Math.round(p.y * f)); wall[p.y * W + p.x] = 0; p.s = Math.min(p.s, maxPitch()); }
+    for (const l of leaves) { l.x = Math.min(W - 1, l.x * f); l.y = Math.min(H - 1, l.y * f); l.trail = []; l.chord = l.chord.map(n => Math.min(n, maxPitch())); }
+    layers = new Map(); notes = new Map(); hoverPost = null;
+    resizeCanvases(); rebuild(); changed(); renderNotes(); renderTune(); renderGrid();
+    gWater = gS = gColour = GAIN_FLOOR; gR = GAIN_FLOOR * GAIN_FLOOR;
+    try { localStorage.setItem('fds-grid', String(k)); } catch (e) {}
+  }
+  function renderGrid() {
+    const g = document.getElementById('grid'); if (g) g.value = String(gridK);
+    const v = document.getElementById('gridv'); if (v) v.textContent = 'up to ' + label(maxPitch());
+  }
   const GAIN_FLOOR = 0.05;
   let gWater = GAIN_FLOOR, gS = GAIN_FLOOR, gR = GAIN_FLOOR * GAIN_FLOOR, gColour = GAIN_FLOOR, cell = 4;
 
@@ -660,7 +705,16 @@ details[open] { display: grid; gap: 8px; }
         mW = Math.max(mW, Math.abs(v));
         const k = Math.max(-1, Math.min(1, v / gWater));
         // with wave colours on, the crest colour is the blend of the waves in this cell, weighted by how hard each is moving it
-        const top = colourWaves ? blendWaves(i, (L, part) => split(L) ? Math.abs(part ? L.u[i] - L.fu[i] : L.fu[i]) : Math.abs(L.u[i]), COL.crest) : COL.crest;
+        let top = COL.crest;
+        if (colourWaves) {
+          top = blendWaves(i, (L, part) => split(L) ? Math.abs(part ? L.u[i] - L.fu[i] : L.fu[i]) : Math.abs(L.u[i]), COL.crest);
+          // Only colour as much water as is really there. Behind a wall the wall-less twin's waves and their echo
+          // cancel exactly, so the parts are big but the water is flat; without this their colours showed through
+          // as a ghost ring that seemed to pass straight through the wall.
+          let parts = 0;
+          for (const L of layers.values()) parts += split(L) ? Math.abs(L.fu[i]) + Math.abs(L.u[i] - L.fu[i]) : Math.abs(L.u[i]);
+          top = mix(COL.crest, top, parts > 1e-9 ? Math.min(1, Math.abs(v) / parts) : 0);
+        }
         c = mix(COL.deep, top, 0.5 + 0.5 * k);
       } else {
         const { E, R, clash } = cellRead(i, arr);
@@ -696,21 +750,22 @@ details[open] { display: grid; gap: 8px; }
     ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(off, 0, 0, cell * W, cell * H);
     ctx.fillStyle = rgb(COL.stone);
-    for (let i = 0; i < N; i++) if (wall[i]) ctx.fillRect((i % W) * cell, ((i / W) | 0) * cell, cell + 0.5, cell + 0.5);
+    ctx.imageSmoothingEnabled = false; ctx.drawImage(wallCv, 0, 0, cell * W, cell * H); ctx.imageSmoothingEnabled = true;
     if (anchor && lockedEnd) {   // the straight run you're holding with Shift, not laid yet
       ctx.globalAlpha = 0.55;
       ctx.fillStyle = tool === 'erase' ? rgb(COL.turb) : rgb(COL.stone);
-      for (const [x, y] of line(anchor, lockedEnd)) ctx.fillRect((x - 1) * cell, (y - 1) * cell, cell * 2, cell * 2);
+      for (const [x, y] of line(anchor, lockedEnd)) ctx.fillRect((x - 2 * gridK + 1) * cell, (y - 2 * gridK + 1) * cell, cell * 2 * gridK, cell * 2 * gridK);
       ctx.globalAlpha = 1;
     }
-    const font = `500 ${Math.max(10, cell * 2.6)}px Azeret Mono, monospace`;
+    const uc = cell * gridK;   // markers and labels sized by a base cell so they look the same at any grid
+    const font = `500 ${Math.max(10, uc * 2.6)}px Azeret Mono, monospace`;
     for (const p of posts) {
       const cx = (p.x + 0.5) * cell, cy = (p.y + 0.5) * cell;
-      ctx.beginPath(); ctx.arc(cx, cy, Math.max(4, cell * 1.1), 0, Math.PI * 2);
+      ctx.beginPath(); ctx.arc(cx, cy, Math.max(4, uc * 1.1), 0, Math.PI * 2);
       ctx.fillStyle = p.muted ? rgb(COL.bg) : rgb(COL.fg); ctx.fill();
       ctx.lineWidth = 2; ctx.strokeStyle = rgb(COL.stone); ctx.stroke();
       ctx.font = font; ctx.fillStyle = rgb(COL.fg); ctx.textBaseline = 'bottom';
-      ctx.fillText(label(p.s), cx + cell * 1.6, cy - cell * 0.6);
+      ctx.fillText(label(p.s), cx + uc * 1.6, cy - uc * 0.6);
     }
     for (const l of leaves) {
       if (l.trail.length > 1) {
@@ -719,13 +774,13 @@ details[open] { display: grid; gap: 8px; }
         ctx.lineTo((l.x + 0.5) * cell, (l.y + 0.5) * cell);
         ctx.globalAlpha = 0.5; ctx.lineWidth = 1.5; ctx.strokeStyle = rgb(COL.calm); ctx.stroke(); ctx.globalAlpha = 1;
       }
-      const cx = (l.x + 0.5) * cell, cy = (l.y + 0.5) * cell, r = Math.max(5, cell * 1.4);
+      const cx = (l.x + 0.5) * cell, cy = (l.y + 0.5) * cell, r = Math.max(5, uc * 1.4);
       ctx.save(); ctx.translate(cx, cy); ctx.rotate(-Math.PI / 4);
       ctx.beginPath(); ctx.ellipse(0, 0, r, r * 0.55, 0, 0, Math.PI * 2);
       ctx.fillStyle = l.muted ? rgb(COL.bg) : rgb(COL.calm); ctx.fill();
       ctx.lineWidth = 1.5; ctx.strokeStyle = rgb(COL.fg); ctx.stroke(); ctx.restore();
       ctx.font = font; ctx.fillStyle = rgb(COL.calm); ctx.textBaseline = 'bottom';
-      ctx.fillText(l.chord.map(label).join(' '), cx + cell * 1.8, cy - cell * 0.8);
+      ctx.fillText(l.chord.map(label).join(' '), cx + uc * 1.8, cy - uc * 0.8);
     }
   }
 
@@ -834,6 +889,7 @@ details[open] { display: grid; gap: 8px; }
       const s = (octave - 2) * 12 + i;
       const on = tool === 'leaf' ? chord.has(s) : i === note;
       c.setAttribute('aria-pressed', on ? 'true' : 'false');
+      c.disabled = s > maxPitch();   // too short a wave for this grid
       if (hoverPost) c.setAttribute('data-iv', IV_CLASS[((Math.round(s - hoverPost.s) % 12) + 12) % 12]); else c.removeAttribute('data-iv');
     });
     document.getElementById('ivwho').textContent = hoverPost
@@ -907,7 +963,7 @@ details[open] { display: grid; gap: 8px; }
   // the water keep the pitch they left with, just as in air; new waves leave at the new pitch.
   let pitchBase = 24;
   function setPitch(p, s) {
-    s = Math.max(0, Math.min(NOTE_COUNT, s));
+    s = Math.max(0, Math.min(maxPitch(), s));
     const old = p.s; if (old === s) return;
     p.s = s;
     const L = layers.get('p' + p.id);
@@ -923,6 +979,7 @@ details[open] { display: grid; gap: 8px; }
   }
   function renderPitch() {
     const isPost = !!sel && !sel.chord; $('pitchbox').hidden = !isPost; if (!isPost) return;
+    $('s-pitch').max = Math.min(1200, Math.round((maxPitch() - pitchBase) * 100));
     $('s-pitch').value = Math.round((sel.s - pitchBase) * 100);
     $('s-pitchl').textContent = 'Octave ' + (2 + pitchBase / 12);
     $('s-pitchv').textContent = label(sel.s) + ' · ' + freqHz(sel.s).toFixed(1) + ' Hz';
@@ -931,11 +988,11 @@ details[open] { display: grid; gap: 8px; }
   $('s-pitch').addEventListener('input', e => { if (!sel || sel.chord) return; setPitch(sel, pitchBase + e.target.value / 100); renderPitch(); });
   $('p-snap').onclick = () => { if (!sel || sel.chord) return; setPitch(sel, Math.round(sel.s)); renderPitch(); };
   $('p-down').onclick = () => { if (!sel || sel.chord || pitchBase < 12) return; pitchBase -= 12; setPitch(sel, sel.s - 12); renderPitch(); };
-  $('p-up').onclick = () => { if (!sel || sel.chord || pitchBase + 12 > NOTE_COUNT - 12) return; pitchBase += 12; setPitch(sel, sel.s + 12); renderPitch(); };
+  $('p-up').onclick = () => { if (!sel || sel.chord || pitchBase + 12 > maxPitch()) return; pitchBase += 12; setPitch(sel, sel.s + 12); renderPitch(); };
 
   function renderTune() {
     $('tuneempty').hidden = !!sel; $('tunebody').hidden = !sel;
-    if (sel && !sel.chord) pitchBase = 12 * Math.min(3, Math.floor(sel.s / 12));
+    if (sel && !sel.chord) pitchBase = 12 * Math.min(Math.floor(maxPitch() / 12), Math.floor(sel.s / 12));
     if (!sel) { $('tuneh').textContent = 'Tune'; return; }
     const s = sel.snd;
     $('tuneh').textContent = 'Tune ' + (sel.chord ? 'leaf ' + sel.chord.map(label).join(' ') : 'post ' + label(sel.s));
@@ -1006,6 +1063,7 @@ details[open] { display: grid; gap: 8px; }
     else for (const L of layers.values()) { delete L.fu; delete L.fup; delete L.fun; delete L.eDir; delete L.eEcho; }
   };
   setColourWaves(colourWaves);
+  $('grid').onchange = e => setGrid(+e.target.value);
   $('m-ear').onclick = () => setMeasure('ear');
   $('m-wave').onclick = () => setMeasure('wave');
   $('m-vol').oninput = e => { masterVol = +e.target.value / 100; };
@@ -1066,7 +1124,8 @@ details[open] { display: grid; gap: 8px; }
   // one 2x2 brush dab, so walls are thick enough to read; returns whether walls changed
   function dab(x, y) {
     let wallsChanged = false;
-    for (let dy = -1; dy <= 0; dy++) for (let dx = -1; dx <= 0; dx++) {
+    const B = 2 * gridK;   // walls stay the same real thickness at any grid
+    for (let dy = 1 - B; dy <= 0; dy++) for (let dx = 1 - B; dx <= 0; dx++) {
       const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
       const j = yy * W + xx;
       const leafHere = leaves.some(l => Math.round(l.x) === xx && Math.round(l.y) === yy);
@@ -1075,7 +1134,7 @@ details[open] { display: grid; gap: 8px; }
         if (wall[j]) { wall[j] = 0; wallsChanged = true; }
         const before = posts.length + leaves.length;
         posts = posts.filter(p => !(p.x === xx && p.y === yy));
-        leaves = leaves.filter(l => Math.hypot(l.x - xx, l.y - yy) > 1.5);
+        leaves = leaves.filter(l => Math.hypot(l.x - xx, l.y - yy) > 1.5 * gridK);
         if (posts.length + leaves.length !== before) changed();
       }
     }
@@ -1100,9 +1159,10 @@ details[open] { display: grid; gap: 8px; }
     const c = cellAt(ev); if (!c) return;
     if (tool === 'post' || tool === 'leaf') {
       if (!first || wall[c[1] * W + c[0]]) return;
+      if (tool === 'post' && (octave - 2) * 12 + note > maxPitch()) return;
       const made = tool === 'post'
         ? { id: nextId++, x: c[0], y: c[1], s: (octave - 2) * 12 + note, muted: false, t0: t, snd: DEF_SND() }
-        : { id: nextId++, x: c[0], y: c[1], chord: [...chord].sort((a, b) => a - b), muted: false, t0: t, trail: [], snd: DEF_SND() };
+        : { id: nextId++, x: c[0], y: c[1], chord: [...chord].filter(n => n <= maxPitch()).sort((a, b) => a - b), muted: false, t0: t, trail: [], snd: DEF_SND() };
       (tool === 'post' ? posts : leaves).push(made);
       sel = made; changed(); renderTune(); return;
     }
@@ -1127,7 +1187,7 @@ details[open] { display: grid; gap: 8px; }
   view$.addEventListener('pointermove', ev => {
     const c = cellAt(ev); hover = c ? c[1] * W + c[0] : -1;
     // the note picker lights up against whichever post is under the mouse (within two cells, nearest wins)
-    let near = null, best = 2.5;
+    let near = null, best = 2.5 * gridK;
     if (c) for (const p of posts) { const d = Math.hypot(p.x - c[0], p.y - c[1]); if (d < best) { best = d; near = p; } }
     if (near !== hoverPost) { hoverPost = near; renderNotes(); }
     if (painting) stroke(ev, false);
@@ -1146,10 +1206,11 @@ details[open] { display: grid; gap: 8px; }
   view$.addEventListener('pointerleave', () => { hover = -1; probe$.innerHTML = PROBE_IDLE; if (hoverPost) { hoverPost = null; renderNotes(); } });
 
   // ---------- presets ----------
-  function box(x0, y0, x1, y1) { for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) wall[y * W + x] = 1; }
+  // presets are laid out in base (1x) cells and scaled to the grid
+  function box(x0, y0, x1, y1) { const K = gridK; for (let x = x0 * K; x < (x1 + 1) * K; x++) for (let y = y0 * K; y < (y1 + 1) * K; y++) wall[y * W + x] = 1; }
   function loadPreset(name) {
     wall = new Uint8Array(N); posts = []; leaves = []; layers = new Map(); notes = new Map(); t = 0;
-    const P = (x, y, s) => posts.push({ id: nextId++, x, y, s, muted: false, t0: 0, snd: DEF_SND() });
+    const P = (x, y, s) => posts.push({ id: nextId++, x: x * gridK, y: y * gridK, s, muted: false, t0: 0, snd: DEF_SND() });
     sel = null;
     if (name === 'courtyard') {
       // a walled yard with a gate in the south wall; a C major triad inside, a clashing F# outside
@@ -1173,7 +1234,7 @@ details[open] { display: grid; gap: 8px; }
   function saveMap() {
     const w = []; for (let i = 0; i < N; i++) if (wall[i]) w.push(i);
     const sig = JSON.stringify({
-      w, p: posts.map(p => [p.x, p.y, p.s, p.muted ? 1 : 0, p.snd]),
+      k: gridK, w, p: posts.map(p => [p.x, p.y, p.s, p.muted ? 1 : 0, p.snd]),
       l: leaves.map(l => [Math.round(l.x * 10) / 10, Math.round(l.y * 10) / 10, l.chord, l.muted ? 1 : 0, l.snd])
     });
     if (sig === savedSig) return;
@@ -1191,6 +1252,7 @@ details[open] { display: grid; gap: 8px; }
         d.l = (d.l || []).map(l => { l[2] = l[2].map(n => n + 24); return l; });
         raw = '';
       }
+      if ((d.k || 1) !== gridK) { applyGrid(d.k || 1); resizeCanvases(); }
       wall = new Uint8Array(N); for (const i of d.w) if (i >= 0 && i < N) wall[i] = 1;
       posts = d.p.map(([x, y, s, m, snd]) => ({ id: nextId++, x, y, s, muted: !!m, t0: 0, snd: { ...DEF_SND(), ...(snd || {}) } }));
       leaves = (d.l || []).map(([x, y, c, m, snd]) => ({ id: nextId++, x, y, chord: c, muted: !!m, t0: 0, trail: [], snd: { ...DEF_SND(), ...(snd || {}) } }));
@@ -1206,14 +1268,16 @@ details[open] { display: grid; gap: 8px; }
   // Real time: the clock runs off the wall clock at a hundredth of true pitch, so A4 really vibrates 4.40 times a
   // second on screen, C4 2.62, C2 0.65, each note at its own true rate. All of them still travel at the same speed,
   // as sound does in air. At this scale a cell is about 7 cm and the map an 11 m room, slowed a hundred times.
-  const RT_HZ_A4 = 4.40, RT_STEPS_PER_SEC = RT_HZ_A4 * LAMBDA_A4 / WAVE_C;   // one A4 period is LAMBDA_A4 / WAVE_C steps
+  const RT_HZ_A4 = 4.40, rtStepsPerSec = () => RT_HZ_A4 * LAMBDA_A4 / WAVE_C;   // one A4 period is LAMBDA_A4 / WAVE_C steps
   let realTime = false, lastTs = null;
   function frame(ts) {
     const dt = lastTs === null || ts === undefined ? 0 : Math.min(0.1, (ts - lastTs) / 1000);
     lastTs = ts === undefined ? null : ts;
     if (running) {
-      pending += realTime ? dt * RT_STEPS_PER_SEC : speed;
-      let n = 0; while (pending >= 1 && n < 40) { step(); pending -= 1; n++; }
+      pending += realTime ? dt * rtStepsPerSec() : speed;
+      // never spend more than ~30 ms a frame stepping, so a fine grid slows the water rather than freezing the page
+      const t0 = performance.now();
+      let n = 0; while (pending >= 1 && n < 40 && performance.now() - t0 < 30) { step(); pending -= 1; n++; }
       if (pending >= 1) pending = 0;   // the machine couldn't keep up this frame: drop the backlog rather than spiral
     }
     draw(); drawProbe(); updateSound();
@@ -1221,7 +1285,8 @@ details[open] { display: grid; gap: 8px; }
     requestAnimationFrame(frame);
   }
   window.addEventListener('resize', size);
-  size(); setTool('wall'); if (!restoreMap()) loadPreset('courtyard');
+  resizeCanvases(); setTool('wall'); if (!restoreMap()) loadPreset('courtyard');
+  renderGrid(); renderNotes();
   { let m = 'ear'; try { m = localStorage.getItem('fds-measure') || 'ear'; } catch (e) {} setMeasure(m === 'wave' ? 'wave' : 'ear'); }
   // warm the tank up so the first view already shows the field rather than an empty map
   for (let k = 0; k < 500; k++) step();
