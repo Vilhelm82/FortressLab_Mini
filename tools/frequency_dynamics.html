@@ -586,7 +586,7 @@ details[open] { display: grid; gap: 8px; }
   // a component; each component has an exact strength. Dissonance is measured from the components actually present:
   // every pair of components from different pitches, weighted by both strengths and by how rough the pair is.
   const READ = `
-  uniform sampler2DArray uS; uniform sampler2D uInfo; uniform sampler2D uLut; uniform sampler2D uPairs;
+  uniform sampler2DArray uS; uniform sampler2D uInfo; uniform sampler2D uLut; uniform sampler2D uPairs; uniform sampler2DArray uDist;
   uniform int uNL, uNC, uNG, uNP, uGEN, uRatio;
   const float PI = 3.14159265, TAU = 6.2831853;
   vec4 info(int i, int r) { return texelFetch(uInfo, ivec2(i, r), 0); }
@@ -598,7 +598,10 @@ details[open] { display: grid; gap: 8px; }
   // the colour of the wave of layer i passing through: which wave of its source's fundamental it belongs to
   vec3 waveCol(int i, ivec2 p, float u, float up) {
     vec4 a = info(i, 0), f = info(i, 2);
-    float d = length(phys(p) - a.xy), n;
+    // how far the sound has travelled to get here: the shortest way round the walls once the GPU has worked it out,
+    // the straight line until then
+    float d = texelFetch(uDist, ivec3(p, int(f.w)), 0).r, n;
+    if (d > 1e8) d = length(phys(p) - a.xy);
     if (f.z < 1.5) {
       float w = a.w, geo = a.z - (w / 0.5) * d, psi = atan(u, (u - up) / w);
       float dd = mod(psi - geo + PI, TAU) - PI;
@@ -785,7 +788,10 @@ details[open] { display: grid; gap: 8px; }
   function tex2D(fmt, w, h) { const x = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, x); gl.texStorage2D(gl.TEXTURE_2D, 1, fmt, w, h); texParams(gl.TEXTURE_2D); return x; }
   function texArray(depth) { const x = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D_ARRAY, x); gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RG32F, W, H, depth); if (gl.getError() === gl.OUT_OF_MEMORY) { gl.deleteTexture(x); throw new Error('gpu memory'); } texParams(gl.TEXTURE_2D_ARRAY); return x; }
   function initGPU() {
-    P_STEP = program(FS_STEP); P_GHOST = program(FS_GHOST); P_VIEW = program(FS_VIEW); P_PRESENT = program(FS_PRESENT); P_METRIC = program(FS_METRIC); P_SAMPLE = program(FS_SAMPLE);
+    P_STEP = program(FS_STEP); P_GHOST = program(FS_GHOST); P_VIEW = program(FS_VIEW); P_PRESENT = program(FS_PRESENT); P_DIST = program(FS_DIST); P_DCOPY = program(FS_DCOPY);
+    gl.useProgram(P_DIST.p);
+    gl.uniform2iv(P_DIST.u.MV, MOVES.flatMap(m => m.m)); gl.uniform1fv(P_DIST.u.ML, MOVES.map(m => m.len));
+    gl.uniform1iv(P_DIST.u.MN, MOVES.map(m => m.mids.length)); gl.uniform2iv(P_DIST.u.MI, MOVES.flatMap(m => [0, 1, 2, 3].flatMap(j => m.mids[j] || [0, 0]))); P_METRIC = program(FS_METRIC); P_SAMPLE = program(FS_SAMPLE);
     gl.bindVertexArray(gl.createVertexArray());
     fbo = gl.createFramebuffer(); fbo2 = gl.createFramebuffer();
     infoTex = tex2D(gl.RGBA32F, MAXL, 4); lutTex = tex2D(gl.RGBA32F, 15, MAXL); pairsTex = tex2D(gl.RGBA32F, MAXPAIRS, 1);
@@ -816,6 +822,7 @@ details[open] { display: grid; gap: 8px; }
       cap = 8; S0 = texArray(cap); SC = texArray(1); setTimeout(gpuFull, 0);
     }
     wallTex = tex2D(gl.R8, W, H); viewTex = tex2D(gl.RGBA8, W, H);
+    distSize = 0;   // the distance maps are remade at the new size
     for (let sl = 0; sl < cap * GEN; sl++) clearSlice(S0, sl);
     uploadWalls();
   }
@@ -854,7 +861,103 @@ details[open] { display: grid; gap: 8px; }
   }
 
   // the walls changed: tell the GPU and repaint the overlay
-  function rebuild() { if (GPU_OK) uploadWalls(); paintWalls(); }
+  function rebuild() { if (GPU_OK) uploadWalls(); paintWalls(); for (const D of dist.values()) D.passes = -1; }
+
+  // ---------- how far the sound has really travelled ----------
+  // Wave colours count waves by the distance the sound travelled to reach a cell: the shortest way through open air,
+  // round walls, never through them. (Counting by straight-line distance let the colour bands cut through walls.)
+  // The GPU works it out for each source by relaxing distances outward a little every frame. The moves are the 6
+  // neighbours, the 6 two-step diagonals and the 12 knight-like moves, which together point every 11 degrees or so,
+  // so paths come out within about half a percent of the true length. A long move only counts if the cells it
+  // crosses are open, so it never hops a wall.
+  const MOVES = (() => {
+    const near = (x, y) => { const q = x - 0.5 * y / S3, r = y / S3, y3 = -q - r;
+      let rq = Math.round(q), rr = Math.round(r); const ry = Math.round(y3);
+      const dq = Math.abs(rq - q), dr = Math.abs(rr - r), dy = Math.abs(ry - y3);
+      if (dq > dy && dq > dr) rq = -ry - rr; else if (!(dy > dr)) rr = -rq - ry; return [rq, rr]; };
+    const list = [[1,0],[-1,0],[0,1],[0,-1],[1,-1],[-1,1], [1,1],[-1,-1],[2,-1],[-2,1],[1,-2],[-1,2],
+      [3,-1],[3,-2],[2,1],[1,2],[-1,3],[-2,3],[-3,1],[-3,2],[-2,-1],[-1,-2],[1,-3],[2,-3]];
+    return list.map(([q, r]) => {
+      const x = q + r / 2, y = r * S3, mids = new Map();
+      for (let t = 0.1; t < 0.95; t += 0.05) for (const e of [-0.06, 0, 0.06]) {
+        const c = near(x * t - y * e, y * t + x * e);
+        if ((c[0] || c[1]) && !(c[0] === q && c[1] === r)) mids.set(c.join(), c);
+      }
+      return { m: [q, r], len: Math.hypot(x, y), mids: [...mids.values()].slice(0, 4) };
+    });
+  })();
+  const FS_DIST = HEAD + `
+  uniform sampler2DArray uD; uniform int uSlice, uInit; uniform ivec2 uSrc;
+  uniform ivec2 MV[24]; uniform float ML[24]; uniform int MN[24]; uniform ivec2 MI[96];   // the move table, set once
+  ivec2 toAx(ivec2 o) { return ivec2(o.x - (o.y - (o.y & 1)) / 2, o.y); }
+  ivec2 toOff(ivec2 a) { return ivec2(a.x + (a.y - (a.y & 1)) / 2, a.y); }
+  void main() {
+    ivec2 p = ivec2(gl_FragCoord.xy);
+    if (wallAt(p)) { o = vec4(1e9); return; }
+    if (uInit == 1) { o = vec4(p == uSrc ? 0. : 1e9); return; }
+    float d = texelFetch(uD, ivec3(p, uSlice), 0).r;
+    ivec2 a = toAx(p);
+    for (int k = 0; k < 24; k++) {
+      ivec2 q = toOff(a + MV[k]);
+      if (!inside(q) || wallAt(q)) continue;
+      bool open = true;
+      for (int j = 0; j < 4; j++) { if (j >= MN[k]) break; ivec2 m = toOff(a + MI[k * 4 + j]); if (!inside(m) || wallAt(m)) { open = false; break; } }
+      if (open) d = min(d, texelFetch(uD, ivec3(q, uSlice), 0).r + ML[k]);
+    }
+    o = vec4(d);
+  }`;
+  const FS_DCOPY = `#version 300 es
+  precision highp float; precision highp sampler2D; uniform sampler2D uC; out vec4 o;
+  void main() { o = texelFetch(uC, ivec2(gl_FragCoord.xy), 0); }`;
+  let P_DIST, P_DCOPY, DT = null, DS = null, dcap = 0;
+  const dist = new Map();   // source -> { slot, cell, passes (-1: start again) }
+  const distPassesNeeded = () => Math.ceil((W + H) / 2.4) + 16;
+  const distSlotOf = src => { const D = dist.get(src); return D && D.slot < dcap ? D.slot : 0; };
+  function distTextures() {
+    const need = Math.max(8, Math.ceil(Math.max(1, ...[...dist.values()].map(D => D.slot + 1)) / 8) * 8);
+    if (DT && dcap === need && DS && distSize === W * 100000 + H) return;
+    for (const x of [DT, DS]) if (x) gl.deleteTexture(x);
+    DT = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D_ARRAY, DT); gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.R32F, W, H, need); texParams(gl.TEXTURE_2D_ARRAY);
+    DS = tex2D(gl.R32F, W, H); dcap = need; distSize = W * 100000 + H;
+    for (let sl = 0; sl < need; sl++) { target(DT, sl); gl.clearBufferfv(gl.COLOR, 0, [1e9, 0, 0, 0]); }
+    for (const D of dist.values()) D.passes = -1;
+  }
+  let distSize = 0;
+  // keep one distance map per source; a drifter's is redone once it has moved a few base cells
+  function distSync() {
+    const srcs = [...posts, ...leaves];
+    for (const k of [...dist.keys()]) if (!srcs.includes(k)) dist.delete(k);
+    const used = new Set([...dist.values()].map(D => D.slot));
+    for (const src of srcs) {
+      const cell = src.chord ? leafCell(src) : [src.x, src.y];
+      let D = dist.get(src);
+      if (!D) { let slot = 0; while (used.has(slot)) slot++; used.add(slot); D = { slot, cell: null, passes: -1 }; dist.set(src, D); }
+      const moved = !D.cell || (src.chord
+        ? Math.hypot(physOf(...cell)[0] - physOf(...D.cell)[0], physOf(...cell)[1] - physOf(...D.cell)[1]) > 3 * gridK
+        : cell[0] !== D.cell[0] || cell[1] !== D.cell[1]);
+      if (moved) { D.cell = cell; D.passes = -1; }
+    }
+  }
+  // spend a few dozen relaxation passes a frame on the maps still settling
+  function distStep(budget = 48) {
+    distSync(); distTextures();
+    const todo = [...dist.values()].filter(D => D.passes < distPassesNeeded());
+    if (!todo.length) return;
+    gl.viewport(0, 0, W, H); gl.useProgram(P_DIST.p);
+    gl.uniform2i(P_DIST.u.uSize, W, H);
+    const each = Math.max(4, Math.floor(budget / todo.length));
+    for (const D of todo) {
+      for (let k = 0; k < each && D.passes < distPassesNeeded(); k++) {
+        gl.useProgram(P_DIST.p); bindTex(P_DIST, 'uD', 0, DT, gl.TEXTURE_2D_ARRAY); bindTex(P_DIST, 'uWall', 1, wallTex);
+        gl.uniform1i(P_DIST.u.uSlice, D.slot); gl.uniform2i(P_DIST.u.uSrc, D.cell[0], D.cell[1]);
+        gl.uniform1i(P_DIST.u.uInit, D.passes < 0 ? 1 : 0);
+        target(DS); gl.drawArrays(gl.TRIANGLES, 0, 3);
+        gl.useProgram(P_DCOPY.p); bindTex(P_DCOPY, 'uC', 0, DS);
+        target(DT, D.slot); gl.drawArrays(gl.TRIANGLES, 0, 3);
+        D.passes = D.passes < 0 ? 0 : D.passes + 1;
+      }
+    }
+  }
 
   // what every source and drifter note sends into the field, harmonic by harmonic
   function wanted() {
@@ -972,7 +1075,7 @@ details[open] { display: grid; gap: 8px; }
       L.comp = cmap.get(ck(L));
       info.set([...srcPos(src), L.n * L.voice.phase + L.off, L.omega], i * 4);
       info.set([L.slot, L.comp, src.muted ? 1 : 0, look.len], (MAXL + i) * 4);
-      info.set([L.voice.phase, L.voice.omega, L.n, 0], (2 * MAXL + i) * 4);
+      info.set([L.voice.phase, L.voice.omega, L.n, distSlotOf(src)], (2 * MAXL + i) * 4);
       for (let k = 0; k < 12; k++) lutD.set([...look.rgb[k].map(v => v / 255), 1], (i * 15 + k) * 4);
       for (let k = 0; k < 3; k++) lutD.set([...look.echoRgb[k].map(v => v / 255), 1], (i * 15 + 12 + k) * 4);
     });
@@ -991,7 +1094,7 @@ details[open] { display: grid; gap: 8px; }
   }
   function bindRead(prog) {
     bindTex(prog, 'uS', 0, S0, gl.TEXTURE_2D_ARRAY); bindTex(prog, 'uWall', 1, wallTex); bindTex(prog, 'uInfo', 2, infoTex);
-    bindTex(prog, 'uLut', 3, lutTex); bindTex(prog, 'uPairs', 4, pairsTex);
+    bindTex(prog, 'uLut', 3, lutTex); bindTex(prog, 'uPairs', 4, pairsTex); bindTex(prog, 'uDist', 6, DT, gl.TEXTURE_2D_ARRAY);
     gl.uniform2i(prog.u.uSize, W, H); gl.uniform1i(prog.u.uNL, order.length); gl.uniform1i(prog.u.uGEN, GEN);
     gl.uniform1i(prog.u.uNC, comps.length); gl.uniform1i(prog.u.uNG, groups.length); gl.uniform1i(prog.u.uNP, nPairs);
     gl.uniform1i(prog.u.uRatio, measure === 'wave' ? 1 : 0);
@@ -1742,7 +1845,7 @@ details[open] { display: grid; gap: 8px; }
       while (pending >= 1 && n < 40 && performance.now() - t0 < 30) { step(); pending -= 1; n++; }
       if (pending >= 1) pending = 0;   // the machine couldn't keep up this frame: drop the backlog rather than spiral
     }
-    if (GPU_OK) { uploadInfo(); readBack(); moveLeaves(n); }
+    if (GPU_OK) { distStep(); uploadInfo(); readBack(); moveLeaves(n); }
     draw();
     drawProbe(); updateSound();
     document.getElementById('clock').textContent = `t = ${t}`;
