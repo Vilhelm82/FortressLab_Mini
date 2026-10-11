@@ -476,9 +476,12 @@ table.mx th { color: var(--muted); font-weight: 500; }
     if (!actx) return;
     const now = actx.currentTime, arr = Ns(), here = soundOn && hover >= 0 && !wall[hover];
     const present = new Set(arr.map(n => n.s));
+    // Loudness follows the same square-root curve as the picture's brightness. Measured straight against the
+    // loudest cell on the map (right on top of a post) almost everywhere else came out near silent.
+    const share = 0.5 / Math.sqrt(Math.max(1, arr.length));
     for (const n of arr) {
       const A = here ? Math.sqrt(2 * n.e[hover]) : 0;
-      voice(n.s).g.gain.setTargetAtTime(Math.min(1, A / gS) * 0.35, now, 0.06);
+      voice(n.s).g.gain.setTargetAtTime(Math.min(1, Math.sqrt(A / gS)) * share, now, 0.06);
     }
     for (const [s, v] of voices) if (!present.has(s)) v.g.gain.setTargetAtTime(0, now, 0.06);
   }
@@ -486,12 +489,19 @@ table.mx th { color: var(--muted); font-weight: 500; }
   sound$.onclick = async () => {
     if (!actx) {
       actx = new (window.AudioContext || window.webkitAudioContext)();
-      master = actx.createGain(); master.gain.value = 0.5; master.connect(actx.destination);
+      master = actx.createGain(); master.gain.value = 0.8; master.connect(actx.destination);
       const imag = new Float32Array(PARTIALS + 1); for (let k = 1; k <= PARTIALS; k++) imag[k] = Math.pow(DECAY, k - 1);
       wave = actx.createPeriodicWave(new Float32Array(PARTIALS + 1), imag);
     }
     soundOn = !soundOn;
     try { if (soundOn) await actx.resume(); } catch (e) {}
+    if (soundOn) {
+      // a short chime on switching on, so you know the browser is letting sound through before you hover
+      const o = actx.createOscillator(), g = actx.createGain(), now = actx.currentTime;
+      o.setPeriodicWave(wave); o.frequency.value = freqHz(12);
+      g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(0.3, now + 0.02); g.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+      o.connect(g).connect(master); o.start(now); o.stop(now + 0.55);
+    }
     sound$.setAttribute('aria-pressed', soundOn ? 'true' : 'false');
     sound$.textContent = soundOn ? 'Sound off' : 'Sound on';
   };
