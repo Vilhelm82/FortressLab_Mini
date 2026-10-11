@@ -298,6 +298,7 @@ details[open] { display: grid; gap: 8px; }
   const LAMBDA_A4 = 11;         // wavelength of A4 in cells; every other note keeps the true ratio (C2 about 74, B5 about 5)
   const SPONGE = 18, SMAX = 0.16;   // wide enough to soak up long bass waves at an open edge
   const AMP = 0.6, RAMP = 120, EMA = 0.012;
+  const OMEGA_REF = 2 * Math.PI * WAVE_C / LAMBDA_A4;   // A4, the note whose push is left as it was
   const LEAF_R = 2;             // how far either side a leaf feels the slope of the water
   const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 
@@ -491,7 +492,10 @@ details[open] { display: grid; gap: 8px; }
       L.phase = (L.phase || 0) + L.omega;   // a running phase, so a pitch change glides instead of jumping
       // strength, the fade envelope and the 1/omega loudness scaling all live inside f, so changing any of them
       // mid-song still adds no net water
-      const src = L.src, f = (src.env || 0) * (src.volNow === undefined ? 1 : src.volNow) * Math.cos(L.phase) / L.omega;
+      // In flat water a low note's waves come out much bigger than a high note's from the same push (spreading in
+      // 2D favours long waves by the square root of the wavelength). Scaling the push by sqrt(omega) evens that out,
+      // so equal Strength means equal wave height at the same distance, whatever the note.
+      const src = L.src, f = (src.env || 0) * (src.volNow === undefined ? 1 : src.volNow) * Math.sqrt(L.omega / OMEGA_REF) * Math.cos(L.phase) / L.omega;
       const at = src.chord ? leafCell(src) : src.y * W + src.x, push = AMP * (L.fPrev - f);
       un[at] += push;
       L.fPrev = f;
