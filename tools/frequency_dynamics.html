@@ -154,7 +154,8 @@ table.mx th { color: var(--muted); font-weight: 500; }
         </div>
         <div class="row">
           <label for="speed">Speed</label>
-          <input id="speed" type="range" min="1" max="10" value="4">
+          <input id="speed" type="range" min="0" max="100" value="85">
+          <span class="hint" id="speedv">4 steps a frame</span>
         </div>
         <div class="row">
           <label for="loss">Air loss</label>
@@ -210,7 +211,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
   let posts = [];               // {x, y, s, muted}
   let layers = new Map();       // semitone -> {s, omega, u, up, un, e, t0}
   let t = 0, running = true, tool = 'wall', view = 'harm', note = 0, octave = 4;
-  let edgeOpen = true, air = 0, speed = 4;
+  let edgeOpen = true, air = 0, speed = 4, pending = 0;
   let nL, nR, nU, nD, live, sigma;
 
   function rebuild() {
@@ -417,7 +418,13 @@ table.mx th { color: var(--muted); font-weight: 500; }
   run$.onclick = () => { running = !running; run$.textContent = running ? 'Pause' : 'Run'; };
   document.getElementById('reset').onclick = resetWaves;
   document.getElementById('edge').onchange = e => { edgeOpen = e.target.value === 'open'; rebuild(); };
-  document.getElementById('speed').oninput = e => { speed = +e.target.value; };
+  // log scale from one step every 50 frames (barely moving) up to 10 steps a frame
+  document.getElementById('speed').oninput = e => {
+    speed = 0.02 * Math.pow(500, +e.target.value / 100);
+    document.getElementById('speedv').textContent = speed >= 1
+      ? `${speed.toFixed(speed < 10 ? 1 : 0)} steps a frame`
+      : `1 step every ${Math.round(1 / speed)} frames`;
+  };
   document.getElementById('loss').oninput = e => { air = +e.target.value * 0.0005; document.getElementById('lossv').textContent = air ? air.toFixed(4) : 'none'; rebuild(); };
   document.getElementById('load').onclick = () => loadPreset(document.getElementById('preset').value);
 
@@ -475,7 +482,7 @@ table.mx th { color: var(--muted); font-weight: 500; }
 
   // ---------- loop ----------
   function frame() {
-    if (running) { for (let k = 0; k < speed; k++) step(); }
+    if (running) { pending += speed; while (pending >= 1) { step(); pending -= 1; } }
     draw(); drawProbe();
     document.getElementById('clock').textContent = `t = ${t}`;
     requestAnimationFrame(frame);
