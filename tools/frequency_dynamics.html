@@ -1,0 +1,489 @@
+<title>Frequency Dynamics Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Hanken+Grotesk:wght@400;500;600&family=Azeret+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a ripple tank on the left, the instrument panel on the right; stacks on phones.
+   Deliberately single-theme: a dark tank so the water reads like light on a surface. */
+:root {
+  color-scheme: dark;
+  --bg: #0d1316;        /* tank ink */
+  --panel: #141c20;
+  --raise: #1b252a;
+  --line: #26343b;
+  --fg: #dbe5e7;
+  --muted: #8aa1a7;
+  --calm: #5fd4c6;      /* constructive water */
+  --turb: #ff7d5c;      /* turbulence */
+  --stone: #c8b388;     /* walls, and the accent */
+  --deep: #07202a;      /* wave trough */
+  --crest: #bfeef0;     /* wave crest */
+  --font-display: "Bricolage Grotesque", "Hanken Grotesk", system-ui, sans-serif;
+  --font-body: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "Azeret Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+html, body { background: var(--bg); color: var(--fg); }
+body { font-family: var(--font-body); font-size: 14px; line-height: 1.45; padding-inline: 16px; padding-block: 18px 28px; }
+.wrap { max-width: 1320px; margin: 0 auto; display: grid; gap: 16px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(22px, 3vw, 30px); letter-spacing: -0.01em; margin: 0; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 70ch; }
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } }
+
+.tank { min-width: 0; display: grid; gap: 10px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; border-right: 1px solid var(--line); background: var(--panel); color: var(--muted); }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--raise); color: var(--fg); box-shadow: inset 0 -2px 0 var(--stone); }
+button { font: 500 13px var(--font-body); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; cursor: pointer; }
+button:hover { background: var(--raise); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--stone); outline-offset: 2px; }
+.spacer { flex: 1; }
+.canvas-box { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--deep); touch-action: none; }
+canvas#view { display: block; width: 100%; height: auto; cursor: crosshair; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; color: var(--muted); font-size: 12px; align-items: center; }
+.swatch { display: inline-block; width: 26px; height: 8px; border-radius: 4px; vertical-align: middle; margin-right: 6px; }
+.sw-water { background: linear-gradient(90deg, var(--deep), var(--crest)); }
+.sw-harm { background: linear-gradient(90deg, var(--calm), var(--turb)); }
+.sw-wall { background: var(--stone); }
+
+aside { display: grid; gap: 12px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 10px; min-width: 0; }
+.card h2 { font: 600 11px var(--font-body); text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); margin: 0; }
+.notes { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; }
+.notes button { font-family: var(--font-data); font-size: 12px; padding: 7px 0; }
+.notes button.sharp { background: var(--bg); }
+.notes button[aria-pressed="true"] { border-color: var(--stone); color: var(--stone); }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row label { color: var(--muted); font-size: 12px; }
+select, input[type=range] { accent-color: var(--stone); }
+select { font: 13px var(--font-body); background: var(--raise); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 7px; }
+.posts { display: grid; gap: 6px; max-height: 220px; overflow: auto; }
+.post { display: grid; grid-template-columns: auto 1fr auto auto; gap: 8px; align-items: center; font-size: 13px; }
+.post .dot { width: 10px; height: 10px; border-radius: 50%; }
+.post .nm { font-family: var(--font-data); }
+.post button { padding: 3px 8px; font-size: 12px; }
+.empty { color: var(--muted); font-size: 13px; }
+.probe { font-family: var(--font-data); font-size: 12px; display: grid; gap: 5px; }
+.bar { display: grid; grid-template-columns: 34px 1fr 44px; gap: 8px; align-items: center; }
+.bar i { display: block; height: 6px; border-radius: 3px; background: var(--calm); }
+.verdict { font-family: var(--font-body); font-weight: 600; }
+table.mx { border-collapse: collapse; font-family: var(--font-data); font-size: 11px; font-variant-numeric: tabular-nums; }
+.mx-box { overflow-x: auto; }
+table.mx th, table.mx td { padding: 3px 5px; text-align: center; }
+table.mx th { color: var(--muted); font-weight: 500; }
+.hint { color: var(--muted); font-size: 12px; margin: 0; }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Frequency Dynamics Simulator</h1>
+    <p>Each post sings one note. The waves spread, bounce off walls and pile up. Where notes agree the water builds; where they clash it churns.</p>
+  </header>
+
+  <div class="main">
+    <section class="tank">
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Tool">
+          <button id="t-wall" aria-pressed="true">Wall</button>
+          <button id="t-post" aria-pressed="false">Post</button>
+          <button id="t-erase" aria-pressed="false">Erase</button>
+        </div>
+        <div class="seg" role="group" aria-label="View">
+          <button id="v-water" aria-pressed="false">Water</button>
+          <button id="v-harm" aria-pressed="true">Harmony</button>
+          <button id="v-turb" aria-pressed="false">Turbulence</button>
+        </div>
+        <span class="spacer"></span>
+        <button id="run">Pause</button>
+        <button id="reset">Reset waves</button>
+      </div>
+      <div class="canvas-box"><canvas id="view" aria-label="Ripple tank map"></canvas></div>
+      <div class="legend">
+        <span id="leg"><span class="swatch sw-harm"></span>calm and constructive to turbulent, brightness is strength</span>
+        <span><span class="swatch sw-wall"></span>hard wall, reflects everything</span>
+        <span id="clock" style="font-family:var(--font-data)">t = 0</span>
+      </div>
+    </section>
+
+    <aside>
+      <div class="card">
+        <h2>Note for the next post</h2>
+        <div class="notes" id="notes"></div>
+        <div class="row">
+          <label for="oct">Octave</label>
+          <select id="oct"><option value="4" selected>4</option><option value="5">5</option></select>
+          <span class="hint">Pick the Post tool, then click the map.</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Posts on the map</h2>
+        <div class="posts" id="posts"></div>
+      </div>
+
+      <div class="card">
+        <h2>Probe</h2>
+        <div class="probe" id="probe"><span class="empty">Hover the map to read a cell.</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Clash between the notes in play</h2>
+        <div class="mx-box" id="mx"></div>
+        <p class="hint">0 is perfect agreement, 1 is the harshest clash in the range. Worked out from overlapping overtones, not a lookup table.</p>
+      </div>
+
+      <div class="card">
+        <h2>Map</h2>
+        <div class="row">
+          <label for="preset">Start from</label>
+          <select id="preset">
+            <option value="courtyard">Courtyard with a gate</option>
+            <option value="fifth">Two posts, a fifth apart</option>
+            <option value="semitone">Two posts, a semitone apart</option>
+            <option value="corridor">A corridor</option>
+            <option value="blank">Empty field</option>
+          </select>
+          <button id="load">Load</button>
+        </div>
+        <div class="row">
+          <label for="edge">Map edge</label>
+          <select id="edge"><option value="open" selected>Open, waves leave</option><option value="hard">Hard, waves bounce</option></select>
+        </div>
+        <div class="row">
+          <label for="speed">Speed</label>
+          <input id="speed" type="range" min="1" max="10" value="4">
+        </div>
+        <div class="row">
+          <label for="loss">Air loss</label>
+          <input id="loss" type="range" min="0" max="20" value="0">
+          <span class="hint" id="lossv">none</span>
+        </div>
+        <p class="hint">With a hard edge and no air loss nothing ever leaves the map, so the water keeps filling up. Open edges let it drain out of the world.</p>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  // ---------- grid and constants ----------
+  const W = 160, H = 100, N = W * H;
+  const C2 = 0.25;              // (wave speed 0.5 cells/step)^2, inside the 2D stability limit
+  const LAMBDA_A4 = 13;         // wavelength of A4 in cells; every other note keeps the true ratio
+  const SPONGE = 14, SMAX = 0.16;
+  const AMP = 0.6, RAMP = 120, EMA = 0.012;
+  const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+  const css = getComputedStyle(document.documentElement);
+  const hex = v => { const h = css.getPropertyValue(v).trim().replace('#',''); return [0,2,4].map(i => parseInt(h.slice(i, i+2), 16)); };
+  const COL = { deep: hex('--deep'), crest: hex('--crest'), calm: hex('--calm'), turb: hex('--turb'), stone: hex('--stone'), bg: hex('--bg'), fg: hex('--fg') };
+
+  // semitone index s: 0 = C4 ... 23 = B5
+  const freqHz = s => 440 * Math.pow(2, (s - 9) / 12);
+  const lambda = s => LAMBDA_A4 * Math.pow(2, -(s - 9) / 12);
+  const label = s => NAMES[s % 12] + (4 + Math.floor(s / 12));
+
+  // ---------- consonance, derived from overtones ----------
+  // Two notes clash where their overtones sit close enough to beat (Plomp-Levelt roughness,
+  // in Sethares' form). Same notes and octaves come out clean; a semitone comes out harshest.
+  const PARTIALS = 8, DECAY = 0.88;
+  function roughPair(f1, a1, f2, a2) {
+    const fm = Math.min(f1, f2), df = Math.abs(f2 - f1), sc = 0.24 / (0.0207 * fm + 18.96);
+    return a1 * a2 * (Math.exp(-3.5 * sc * df) - Math.exp(-5.75 * sc * df));
+  }
+  function cross(a, b) {
+    let t = 0;
+    for (let p = 0; p < PARTIALS; p++) for (let q = 0; q < PARTIALS; q++)
+      t += roughPair(freqHz(a) * (p + 1), Math.pow(DECAY, p), freqHz(b) * (q + 1), Math.pow(DECAY, q));
+    return t;
+  }
+  const D = []; let dmax = 0;
+  for (let a = 0; a < 24; a++) { D[a] = []; for (let b = 0; b < 24; b++) {
+    const v = Math.max(0, cross(a, b) - 0.5 * (cross(a, a) + cross(b, b))); D[a][b] = v; if (v > dmax) dmax = v; } }
+  for (let a = 0; a < 24; a++) for (let b = 0; b < 24; b++) D[a][b] /= dmax;
+
+  // ---------- state ----------
+  let wall = new Uint8Array(N);
+  let posts = [];               // {x, y, s, muted}
+  let layers = new Map();       // semitone -> {s, omega, u, up, un, e, t0}
+  let t = 0, running = true, tool = 'wall', view = 'harm', note = 0, octave = 4;
+  let edgeOpen = true, air = 0, speed = 4;
+  let nL, nR, nU, nD, live, sigma;
+
+  function rebuild() {
+    nL = new Int32Array(N); nR = new Int32Array(N); nU = new Int32Array(N); nD = new Int32Array(N);
+    sigma = new Float32Array(N);
+    const lv = [];
+    for (let i = 0; i < N; i++) {
+      if (wall[i]) continue;
+      const x = i % W, y = (i / W) | 0;
+      // A wall or the map edge mirrors the cell back on itself: zero slope, perfect reflection.
+      nL[i] = (x > 0 && !wall[i - 1]) ? i - 1 : i;
+      nR[i] = (x < W - 1 && !wall[i + 1]) ? i + 1 : i;
+      nU[i] = (y > 0 && !wall[i - W]) ? i - W : i;
+      nD[i] = (y < H - 1 && !wall[i + W]) ? i + W : i;
+      let s = air;
+      if (edgeOpen) { const d = Math.min(x, y, W - 1 - x, H - 1 - y); if (d < SPONGE) s += SMAX * Math.pow((SPONGE - d) / SPONGE, 2); }
+      sigma[i] = s; lv.push(i);
+    }
+    live = Int32Array.from(lv);
+    for (const L of layers.values()) for (let i = 0; i < N; i++) if (wall[i]) { L.u[i] = 0; L.up[i] = 0; L.un[i] = 0; L.e[i] = 0; }
+  }
+
+  function syncLayers() {
+    const used = new Set(posts.map(p => p.s));
+    for (const s of [...layers.keys()]) if (!used.has(s)) layers.delete(s);
+    for (const s of used) if (!layers.has(s)) {
+      const f = 0.5 / lambda(s);  // cycles per step
+      layers.set(s, { s, omega: 2 * Math.PI * f, u: new Float32Array(N), up: new Float32Array(N), un: new Float32Array(N), e: new Float32Array(N), t0: t });
+    }
+  }
+
+  function resetWaves() {
+    for (const L of layers.values()) { L.u.fill(0); L.up.fill(0); L.un.fill(0); L.e.fill(0); L.t0 = t; }
+  }
+
+  // ---------- the wave step ----------
+  function step() {
+    for (const L of layers.values()) {
+      const u = L.u, up = L.up, un = L.un, e = L.e;
+      for (let k = 0; k < live.length; k++) {
+        const i = live[k], s = sigma[i];
+        const lap = u[nL[i]] + u[nR[i]] + u[nU[i]] + u[nD[i]] - 4 * u[i];
+        un[i] = (2 * u[i] - (1 - s) * up[i] + C2 * lap) / (1 + s);
+      }
+      const ramp = Math.min(1, (t - L.t0) / RAMP);
+      const drive = AMP * ramp * Math.sin(L.omega * t);
+      for (const p of posts) if (p.s === L.s && !p.muted) un[p.y * W + p.x] += drive;
+      L.up = u; L.u = un; L.un = up;
+      const nu = L.u;
+      for (let k = 0; k < live.length; k++) { const i = live[k]; e[i] += (nu[i] * nu[i] - e[i]) * EMA; }
+    }
+    t++;
+  }
+
+  // ---------- reading a cell ----------
+  // amplitude per note, total strength, roughness (pairwise clash weighted by both amplitudes)
+  const Ls = () => [...layers.values()];
+  function cellRead(i, arr) {
+    let E = 0, R = 0;
+    for (let a = 0; a < arr.length; a++) {
+      const A = Math.sqrt(2 * arr[a].e[i]); E += A * A;
+      for (let b = a + 1; b < arr.length; b++) R += A * Math.sqrt(2 * arr[b].e[i]) * D[arr[a].s][arr[b].s];
+    }
+    return { E, R };
+  }
+
+  // ---------- drawing ----------
+  const view$ = document.getElementById('view');
+  const ctx = view$.getContext('2d');
+  const off = document.createElement('canvas'); off.width = W; off.height = H;
+  const octx = off.getContext('2d'); const img = octx.createImageData(W, H);
+  let gWater = 1e-3, gS = 1e-3, gR = 1e-3, cell = 4;
+
+  function size() {
+    const box = view$.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    cell = box.width / W;
+    view$.width = Math.round(box.width * dpr); view$.height = Math.round(box.width * H / W * dpr);
+    view$.style.height = (box.width * H / W) + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  const mix = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+
+  function draw() {
+    const arr = Ls(), px = img.data;
+    let mW = 0, mS = 0, mR = 0;
+    for (let i = 0; i < N; i++) {
+      let c;
+      if (wall[i]) c = COL.bg;
+      else if (view === 'water') {
+        let v = 0; for (const L of arr) v += L.u[i];
+        mW = Math.max(mW, Math.abs(v));
+        const k = Math.max(-1, Math.min(1, v / gWater));
+        c = mix(COL.deep, COL.crest, 0.5 + 0.5 * k);
+      } else {
+        const { E, R } = cellRead(i, arr);
+        const S = Math.sqrt(E); mS = Math.max(mS, S); mR = Math.max(mR, R);
+        if (view === 'harm') {
+          const b = Math.min(1, Math.sqrt(S / gS));
+          const r = Math.min(1, (R / (E + 1e-12)) / 0.5);
+          c = mix(COL.deep, mix(COL.calm, COL.turb, r), b);
+        } else {
+          const r = Math.min(1, Math.sqrt(R / gR));
+          c = mix(COL.deep, COL.turb, r);
+        }
+      }
+      const o = i * 4; px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 255;
+    }
+    // auto gain: rises instantly, falls slowly, so the picture stays readable as the tank fills
+    if (view === 'water') gWater = Math.max(mW, gWater * 0.985, 1e-3);
+    else { gS = Math.max(mS, gS * 0.985, 1e-3); gR = Math.max(mR, gR * 0.985, 1e-3); }
+    octx.putImageData(img, 0, 0);
+    const w = cell * W, h = cell * H;
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(off, 0, 0, w, h);
+    ctx.fillStyle = `rgb(${COL.stone})`;
+    for (let i = 0; i < N; i++) if (wall[i]) ctx.fillRect((i % W) * cell, ((i / W) | 0) * cell, cell + 0.5, cell + 0.5);
+    for (const p of posts) {
+      const cx = (p.x + 0.5) * cell, cy = (p.y + 0.5) * cell;
+      ctx.beginPath(); ctx.arc(cx, cy, Math.max(4, cell * 1.1), 0, Math.PI * 2);
+      ctx.fillStyle = p.muted ? `rgb(${COL.bg})` : `rgb(${COL.fg})`; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = `rgb(${COL.stone})`; ctx.stroke();
+      ctx.font = `500 ${Math.max(10, cell * 2.6)}px Azeret Mono, monospace`;
+      ctx.fillStyle = `rgb(${COL.fg})`; ctx.textBaseline = 'bottom';
+      ctx.fillText(label(p.s), cx + cell * 1.6, cy - cell * 0.6);
+    }
+  }
+
+  // ---------- probe ----------
+  let hover = -1;
+  const probe$ = document.getElementById('probe');
+  function drawProbe() {
+    if (hover < 0) return;
+    const arr = Ls();
+    if (wall[hover]) { probe$.innerHTML = '<span class="empty">Wall.</span>'; return; }
+    const amps = arr.map(L => [L.s, Math.sqrt(2 * L.e[hover])]).sort((a, b) => a[0] - b[0]);
+    const top = Math.max(1e-9, ...amps.map(a => a[1]));
+    const { E, R } = cellRead(hover, arr);
+    const r = E > 1e-12 ? R / E : 0;
+    const verdict = E < 1e-8 ? 'still water' : r < 0.06 ? 'calm, constructive' : r < 0.18 ? 'choppy' : 'turbulent';
+    const x = hover % W, y = (hover / W) | 0;
+    probe$.innerHTML =
+      `<div>cell ${x}, ${y}</div>` +
+      amps.map(([s, a]) => `<div class="bar"><span>${label(s)}</span><span><i style="width:${(100 * a / top).toFixed(0)}%"></i></span><span>${a.toFixed(3)}</span></div>`).join('') +
+      `<div>clash ratio ${r.toFixed(3)} · <span class="verdict">${verdict}</span></div>`;
+  }
+
+  // ---------- panel ----------
+  const notes$ = document.getElementById('notes');
+  NAMES.forEach((n, i) => {
+    const b = document.createElement('button'); b.textContent = n; if (n.includes('#')) b.className = 'sharp';
+    b.setAttribute('aria-pressed', i === note ? 'true' : 'false');
+    b.onclick = () => { note = i; [...notes$.children].forEach((c, j) => c.setAttribute('aria-pressed', j === i ? 'true' : 'false')); setTool('post'); };
+    notes$.appendChild(b);
+  });
+  document.getElementById('oct').onchange = e => { octave = +e.target.value; };
+
+  function postColor(p) { return p.muted ? 'var(--line)' : 'var(--fg)'; }
+  function renderPosts() {
+    const el = document.getElementById('posts');
+    if (!posts.length) { el.innerHTML = '<span class="empty">No posts yet. Pick a note and click the map.</span>'; }
+    else {
+      el.innerHTML = '';
+      posts.forEach((p, k) => {
+        const row = document.createElement('div'); row.className = 'post';
+        row.innerHTML = `<span class="dot" style="background:${postColor(p)}"></span><span class="nm">${label(p.s)} <span style="color:var(--muted)">at ${p.x}, ${p.y}</span></span>`;
+        const m = document.createElement('button'); m.textContent = p.muted ? 'Unmute' : 'Mute';
+        m.onclick = () => { p.muted = !p.muted; renderPosts(); };
+        const d = document.createElement('button'); d.textContent = 'Remove';
+        d.onclick = () => { posts.splice(k, 1); syncLayers(); renderPosts(); renderMatrix(); };
+        row.append(m, d); el.appendChild(row);
+      });
+    }
+  }
+  function renderMatrix() {
+    const ss = [...new Set(posts.map(p => p.s))].sort((a, b) => a - b);
+    const el = document.getElementById('mx');
+    if (ss.length < 2) { el.innerHTML = '<span class="empty">Needs two different notes on the map.</span>'; return; }
+    let h = '<table class="mx"><tr><th></th>' + ss.map(s => `<th>${label(s)}</th>`).join('') + '</tr>';
+    for (const a of ss) {
+      h += `<tr><th>${label(a)}</th>`;
+      for (const b of ss) {
+        const v = D[a][b], c = mix(COL.calm, COL.turb, Math.min(1, v));
+        h += a === b ? '<td style="color:var(--muted)">·</td>' : `<td style="color:rgb(${c.map(Math.round)})">${v.toFixed(2)}</td>`;
+      }
+      h += '</tr>';
+    }
+    el.innerHTML = h + '</table>';
+  }
+
+  function setTool(n) { tool = n; ['wall', 'post', 'erase'].forEach(k => document.getElementById('t-' + k).setAttribute('aria-pressed', k === n ? 'true' : 'false')); }
+  ['wall', 'post', 'erase'].forEach(k => document.getElementById('t-' + k).onclick = () => setTool(k));
+  const LEG = {
+    water: '<span class="swatch sw-water"></span>the raw water: trough to crest, all notes added together',
+    harm: '<span class="swatch sw-harm"></span>calm and constructive to turbulent, brightness is strength',
+    turb: '<span class="swatch" style="background:linear-gradient(90deg,var(--deep),var(--turb))"></span>turbulence only'
+  };
+  function setView(n) { view = n; ['water', 'harm', 'turb'].forEach(k => document.getElementById('v-' + k).setAttribute('aria-pressed', ({ water: 'water', harm: 'harm', turb: 'turb' })[k] === n ? 'true' : 'false')); document.getElementById('leg').innerHTML = LEG[n]; }
+  document.getElementById('v-water').onclick = () => setView('water');
+  document.getElementById('v-harm').onclick = () => setView('harm');
+  document.getElementById('v-turb').onclick = () => setView('turb');
+  const run$ = document.getElementById('run');
+  run$.onclick = () => { running = !running; run$.textContent = running ? 'Pause' : 'Run'; };
+  document.getElementById('reset').onclick = resetWaves;
+  document.getElementById('edge').onchange = e => { edgeOpen = e.target.value === 'open'; rebuild(); };
+  document.getElementById('speed').oninput = e => { speed = +e.target.value; };
+  document.getElementById('loss').oninput = e => { air = +e.target.value * 0.0005; document.getElementById('lossv').textContent = air ? air.toFixed(4) : 'none'; rebuild(); };
+  document.getElementById('load').onclick = () => loadPreset(document.getElementById('preset').value);
+
+  // ---------- painting ----------
+  let painting = false;
+  function cellAt(ev) {
+    const r = view$.getBoundingClientRect();
+    const x = Math.floor((ev.clientX - r.left) / (r.width / W)), y = Math.floor((ev.clientY - r.top) / (r.height / H));
+    return (x >= 0 && y >= 0 && x < W && y < H) ? [x, y] : null;
+  }
+  function apply(ev, first) {
+    const c = cellAt(ev); if (!c) return;
+    const [x, y] = c, i = y * W + x;
+    if (tool === 'post') {
+      if (!first || wall[i]) return;
+      posts.push({ x, y, s: (octave - 4) * 12 + note, muted: false }); syncLayers(); renderPosts(); renderMatrix(); return;
+    }
+    let changed = false;
+    for (let dy = -1; dy <= 0; dy++) for (let dx = -1; dx <= 0; dx++) {   // a 2x2 brush, so walls are thick enough to read
+      const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0) continue;
+      const j = yy * W + xx;
+      if (tool === 'wall' && !wall[j] && !posts.some(p => p.x === xx && p.y === yy)) { wall[j] = 1; changed = true; }
+      if (tool === 'erase') {
+        if (wall[j]) { wall[j] = 0; changed = true; }
+        const before = posts.length; posts = posts.filter(p => !(p.x === xx && p.y === yy));
+        if (posts.length !== before) { syncLayers(); renderPosts(); renderMatrix(); }
+      }
+    }
+    if (changed) rebuild();
+  }
+  view$.addEventListener('pointerdown', ev => { painting = true; view$.setPointerCapture(ev.pointerId); apply(ev, true); });
+  view$.addEventListener('pointermove', ev => { const c = cellAt(ev); hover = c ? c[1] * W + c[0] : -1; if (painting) apply(ev, false); });
+  view$.addEventListener('pointerup', () => { painting = false; });
+  view$.addEventListener('pointerleave', () => { hover = -1; probe$.innerHTML = '<span class="empty">Hover the map to read a cell.</span>'; });
+
+  // ---------- presets ----------
+  function box(x0, y0, x1, y1) { for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) wall[y * W + x] = 1; }
+  function loadPreset(name) {
+    wall = new Uint8Array(N); posts = []; layers = new Map();
+    const P = (x, y, s) => posts.push({ x, y, s, muted: false });
+    if (name === 'courtyard') {
+      // a walled yard with a gate in the south wall; a C major triad inside, a clashing F# outside
+      box(52, 22, 108, 23); box(52, 76, 74, 77); box(86, 76, 108, 77); box(52, 22, 53, 77); box(107, 22, 108, 77);
+      box(70, 40, 71, 58);  // an inner wall to cast a shadow
+      P(84, 46, 0); P(84, 52, 4); P(90, 49, 7);
+      P(80, 92, 6);
+    } else if (name === 'fifth') { P(55, 50, 0); P(105, 50, 7); }
+    else if (name === 'semitone') { P(55, 50, 0); P(105, 50, 1); }
+    else if (name === 'corridor') {
+      box(20, 40, 140, 41); box(20, 58, 140, 59); box(139, 40, 140, 59);
+      P(130, 49, 0); P(30, 49, 7);
+    }
+    t = 0; rebuild(); syncLayers(); renderPosts(); renderMatrix(); gWater = gS = gR = 1e-3;
+  }
+
+  // ---------- loop ----------
+  function frame() {
+    if (running) { for (let k = 0; k < speed; k++) step(); }
+    draw(); drawProbe();
+    document.getElementById('clock').textContent = `t = ${t}`;
+    requestAnimationFrame(frame);
+  }
+  window.addEventListener('resize', size);
+  size(); loadPreset('courtyard');
+  // warm the tank up so the first view already shows the field rather than an empty map
+  for (let k = 0; k < 500; k++) step();
+  requestAnimationFrame(frame);
+})();
+</script>
