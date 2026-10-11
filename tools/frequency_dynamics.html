@@ -271,7 +271,7 @@ details[open] { display: grid; gap: 8px; }
             </select>
             <button id="load">Load</button></div>
           <div class="ctl"><label for="grid">Resolution</label>
-            <select id="grid"><option value="1">1x · 160 × 100</option><option value="2">2x · 320 × 200, 4× the work</option><option value="3">3x · 480 × 300, 9× the work</option></select><span class="val" id="gridv"></span></div>
+            <select id="grid"><option value="1">1x · 160 × 100</option><option value="2">2x · 320 × 200, 4× the work</option><option value="3">3x · 480 × 300, 9× the work</option><option value="4">4x · 640 × 400, 16× the work</option><option value="5">5x · 800 × 500, 25× the work</option><option value="6">6x · 960 × 600, 36× the work</option></select><span class="val" id="gridv"></span></div>
           <div class="ctl"><label for="edge">Boundary</label>
             <select id="edge"><option value="open" selected>Absorbing</option><option value="hard">Reflective</option></select><span></span></div>
           <div class="ctl"><label for="speed">Speed</label><input id="speed" type="range" min="0" max="100" value="85"><span class="val" id="speedv">4 steps a frame</span></div>
@@ -307,7 +307,7 @@ details[open] { display: grid; gap: 8px; }
   // with it, so finer grids fit shorter waves (higher notes) at the cost of four or nine times the work.
   const BASE_W = 160, BASE_H = 100, BASE_LAMBDA = 11, MIN_WAVE_CELLS = 3.6;
   let gridK = 1;
-  try { gridK = Math.max(1, Math.min(3, +localStorage.getItem('fds-grid') || 1)); } catch (e) {}
+  try { gridK = Math.max(1, Math.min(6, +localStorage.getItem('fds-grid') || 1)); } catch (e) {}
   let W, H, N, LAMBDA_A4, SPONGE, EMA, OMEGA_REF, LEAF_R;
   const WAVE_C = 0.5, C2 = WAVE_C * WAVE_C;   // waves travel half a cell a step, inside the 2D stability limit
   const SMAX = 0.16, AMP = 0.6, RAMP = 120;
@@ -329,7 +329,9 @@ details[open] { display: grid; gap: 8px; }
   // semitone index s: 0 = C2 ... 47 = B5, so A4 (440 Hz) is 33
   const NOTE_COUNT = 72, NORM_COUNT = 48, A4 = 33;   // pitches run C2 to B7; clash is scaled against C2 to B5 as before
   // the highest pitch the current grid can carry: its wave still needs a few cells to be a wave
-  const maxPitch = () => Math.min(NOTE_COUNT - 1, Math.floor(A4 + 12 * Math.log2(LAMBDA_A4 / MIN_WAVE_CELLS)));
+  // the shortest wave the grid can carry; sung notes also stop at the top of the note range (B7), harmonics don't
+  const gridMax = () => Math.floor(A4 + 12 * Math.log2(LAMBDA_A4 / MIN_WAVE_CELLS));
+  const maxPitch = () => Math.min(NOTE_COUNT - 1, gridMax());
   const freqHz = s => 440 * Math.pow(2, (s - A4) / 12);
   const lambda = s => LAMBDA_A4 * Math.pow(2, -(s - A4) / 12);
   // a pitch's name, with cents when it sits between notes (C4+37¢)
@@ -443,7 +445,7 @@ details[open] { display: grid; gap: 8px; }
     const f = SHAPES[shape] || SHAPES.overtones, out = [];
     for (let n = 1; n <= MAX_HARM; n++) {
       const a = f(n), sn = s + 12 * Math.log2(n);
-      if (Math.abs(a) < HARM_MIN || (clip && n > 1 && sn > maxPitch())) continue;
+      if (Math.abs(a) < HARM_MIN || (clip && n > 1 && sn > gridMax())) continue;
       out.push({ n, a: Math.abs(a), off: a < 0 ? Math.PI : 0, s: sn });
     }
     return out;
@@ -729,7 +731,7 @@ details[open] { display: grid; gap: 8px; }
     gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   }
   function tex2D(fmt, w, h) { const x = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, x); gl.texStorage2D(gl.TEXTURE_2D, 1, fmt, w, h); texParams(gl.TEXTURE_2D); return x; }
-  function texArray(depth) { const x = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D_ARRAY, x); gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RG32F, W, H, depth); texParams(gl.TEXTURE_2D_ARRAY); return x; }
+  function texArray(depth) { const x = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D_ARRAY, x); gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.RG32F, W, H, depth); if (gl.getError() === gl.OUT_OF_MEMORY) { gl.deleteTexture(x); throw new Error('gpu memory'); } texParams(gl.TEXTURE_2D_ARRAY); return x; }
   function initGPU() {
     P_STEP = program(FS_STEP); P_GHOST = program(FS_GHOST); P_VIEW = program(FS_VIEW); P_METRIC = program(FS_METRIC); P_SAMPLE = program(FS_SAMPLE);
     gl.bindVertexArray(gl.createVertexArray());
@@ -743,7 +745,9 @@ details[open] { display: grid; gap: 8px; }
   function allocField(slots = 8) {
     for (const x of [S0, S1, wallTex]) if (x) gl.deleteTexture(x);
     cap = Math.min(MAXL, Math.max(8, Math.ceil(slots / 8) * 8));
-    S0 = texArray(cap * GEN); S1 = texArray(cap * GEN); wallTex = tex2D(gl.R8, W, H);
+    try { S0 = texArray(cap * GEN); S1 = texArray(cap * GEN); }
+    catch (e) { if (S0) gl.deleteTexture(S0); cap = 8; S0 = texArray(cap * GEN); S1 = texArray(cap * GEN); setTimeout(gpuFull, 0); }
+    wallTex = tex2D(gl.R8, W, H);
     glcv.width = W; glcv.height = H;
     for (let sl = 0; sl < cap * GEN; sl++) { clearSlice(S0, sl); clearSlice(S1, sl); }
     uploadWalls();
@@ -751,9 +755,11 @@ details[open] { display: grid; gap: 8px; }
   // make room for more slots, keeping every wave already in the field
   function ensureCap(slots) {
     if (!GPU_OK || slots <= cap) return;
-    const old0 = S0, old1 = S1, oldDepth = cap * GEN;
+    const old0 = S0, old1 = S1, oldDepth = cap * GEN, oldCap = cap;
     cap = Math.min(MAXL, Math.ceil(slots / 8) * 8);
-    S0 = texArray(cap * GEN); S1 = texArray(cap * GEN);
+    // a fine grid with many waves and reflections can outgrow the graphics card's memory: keep what we have and say so
+    try { S0 = texArray(cap * GEN); S1 = texArray(cap * GEN); }
+    catch (e) { if (S0 !== old0) gl.deleteTexture(S0); S0 = old0; S1 = old1; cap = oldCap; gpuFull(); return; }
     for (const [from, to] of [[old0, S0], [old1, S1]]) for (let sl = 0; sl < cap * GEN; sl++) {
       if (sl >= oldDepth) { clearSlice(to, sl); continue; }
       gl.bindFramebuffer(gl.READ_FRAMEBUFFER, fbo2); gl.framebufferTextureLayer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, from, 0, sl);
@@ -805,7 +811,8 @@ details[open] { display: grid; gap: 8px; }
       if (!L) {
         let slot = 0; while (used.has(slot)) slot++;
         if (slot >= MAXL) continue;                    // no room left; placing refuses before it gets here
-        used.add(slot); ensureCap(slot + 1); if (GPU_OK) clearSlot(slot);
+        ensureCap(slot + 1); if (GPU_OK && slot >= cap) continue;   // out of graphics memory
+        used.add(slot); if (GPU_OK) clearSlot(slot);
         L = { key: k, slot, fPrev: 0 }; layers.set(k, L);
       }
       Object.assign(L, { src: w.src, voice: V, s: w.s, n: w.n, a: w.a, off: w.off, omega: w.n * V.omega });
@@ -1515,6 +1522,11 @@ details[open] { display: grid; gap: 8px; }
     if (wallsChanged) rebuild();
   }
   // the field has room for 64 waves: each harmonic of each sung note is one
+  function gpuFull() {
+    const h = $('notehint');
+    h.textContent = 'Out of graphics memory for more waves at this resolution. Use a coarser grid, turn Reflections off, or remove something.';
+    h.style.color = 'var(--turb)'; setTimeout(() => { h.style.color = ''; }, 5000);
+  }
   function flashFull() {
     const h = $('notehint'), was = h.textContent;
     h.textContent = 'The field is full: 64 waves at most (each harmonic of each note is one). Remove something or use a simpler waveform.';
